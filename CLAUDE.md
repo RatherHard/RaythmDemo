@@ -15,7 +15,7 @@
 | 模块 | 技术选型 | 版本/说明 |
 |------|---------|----------|
 | **开发语言** | C++ | C++20 标准 |
-| **构建系统** | CMake | 3.20+ |
+| **构建/测试系统** | CMake/CTest | 3.20+ |
 | **开发环境** | VSCode | 配合 C++ 扩展 |
 | **音频引擎** | miniaudio | 单头文件库，低延迟音频 |
 | **图形渲染** | Vulkan/Volk | 现代跨平台图形 API |
@@ -43,28 +43,29 @@
 
 ```
 RaythmDemo/
-├── .vscode/               # VSCode 工作区配置 (launch.json, tasks.json)
-├── assets/                # 运行时资源文件
-├── docs/                  # 项目文档
-│   ├── savedprompt/       # [系统保留] AI 提示词存档 (仅只读)
-│   └── 技术设计文档/       # 架构设计、选型说明等
-├── include/               # 核心头文件 (.hpp / .h) - 必须按模块划分子目录
-│   ├── Core/              # 核心框架 (无平台依赖的基础设施、主循环、时间系统)
-│   ├── Platform/          # SDL3 后端、窗口、输入、系统事件封装
-│   ├── Audio/             # 音频引擎封装
-│   ├── Render/            # Vulkan 渲染后端
-│   └── Game/              # 游戏逻辑、谱面解析、实体
-├── src/                   # 源代码文件 (.cpp) - 目录结构必须与 include 镜像一致
+├── .vscode/                # VSCode 工作区配置 (launch.json, tasks.json)
+├── assets/                 # 运行时资源文件
+├── docs/                   # 项目文档
+│   ├── savedprompt/        # [系统保留] AI 提示词存档 (仅只读)
+│   └── 技术设计文档/        # 架构设计、选型说明等
+├── include/                # 核心头文件 (.hpp / .h) - 必须按模块划分子目录
+│   ├── Core/               # 核心框架 (无平台依赖的基础设施、主循环、时间系统)
+│   ├── Platform/           # SDL3 后端、窗口、输入、系统事件封装
+│   ├── Audio/              # 音频引擎封装
+│   ├── Render/             # Vulkan 渲染后端
+│   └── Game/               # 游戏逻辑、谱面解析、实体
+├── src/                    # 源代码文件 (.cpp) - 目录结构必须与 include 镜像一致
 │   ├── Core/
 │   ├── Platform/
 │   ├── Audio/
 │   ├── Render/
 │   ├── Game/
-│   └── main.cpp           # 程序主入口
-├── third_party/           # 第三方源码库
-│   ├── miniaudio/         # miniaudio.h
-├── CMakeLists.txt         # 顶层 CMake 构建脚本
-└── vcpkg.json             # vcpkg 依赖清单
+│   └── main.cpp            # 程序主入口
+├── third_party/            # 第三方源码库
+│   └──miniaudio/           # miniaudio.h
+├── tests/                  # 测试代码
+├── CMakeLists.txt          # 顶层 CMake 构建脚本
+└── vcpkg.json              # vcpkg 依赖清单
 ```
 
 ---
@@ -75,6 +76,7 @@ RaythmDemo/
 
 #### 命名约定
 
+- **命名空间**：项目中所有类、全局变量、常量均应放在名为 Raythm 的 namespace 下
 - **类名**：PascalCase
 - **函数名**：camelCase
 - **变量名**：camelCase
@@ -91,6 +93,8 @@ RaythmDemo/
 
 #### 代码注释规范
 
+- **强制注释要求**：对于每一个类、类的成员和方法、变量、函数、结构体等均应有符合要求的注释
+- **函数注释**：包含 `@param`、`@return`、`@note`（性能注意事项）
 - **文件头注释**：每个源文件顶部包含文件说明、作者、日期
 - **类注释**：Doxygen 格式的 `@brief` 说明类的职责
 - **函数注释**：包含 `@param`、`@return`、`@note`（性能注意事项）
@@ -106,6 +110,27 @@ RaythmDemo/
 
 - **头文件引入红线**: 任何需要调用 Vulkan API 的文件，必须使用 #include <volk.h>。绝对禁止直接出现 #include <vulkan/vulkan.h>。
 - **初始化顺序**: 在程序生命周期中，必须保证 volkInitialize() 是被执行的第一个 Vulkan 函数。在创建 VkInstance 后，必须立刻调用 volkLoadInstance(instance)。
+
+### clangd 配置同步规范
+
+- 当 `CMakeLists.txt`、`.vscode/c_cpp_properties.json` 或项目目录结构发生会影响头文件搜索路径、预处理宏、C++ 标准、第三方依赖路径的变更时，必须同步检查并更新 `.clangd`。
+- `.clangd` 中的 `CompileFlags.Add` 必须与当前 CMake 目标的有效编译参数保持一致，至少覆盖项目公共头文件目录 `include/`、`third_party/miniaudio/`、当前目标平台的 vcpkg 安装头文件目录，以及平台必要宏。
+- Windows 与 Linux 的 include 路径和预处理宏必须分别核对；不得只按单一平台路径更新 `.clangd` 后即视为完成。
+- 新增模块头文件目录或第三方头文件目录后，必须确认编辑器能够解析对应 include。
+- 修改 `.clangd` 后，必须提示用户刷新对应语言服务缓存。
+
+---
+
+## 测试规范
+
+在新增或修改测试代码时，必须使用 CTest 接入和执行测试。不要只创建测试文件；必须检查相关目录的 `CMakeLists.txt`，并按项目现有模式完成测试注册。
+要求：
+
+1. 新增测试源文件后，必须将其加入对应测试目标，或创建新的测试目标。
+2. 必须在 `CMakeLists.txt` 中使用 `add_test()` 将测试注册到 CTest。
+3. 测试目标名称和 CTest 测试名称应与项目现有命名风格保持一致。
+4. 完成后必须通过 CTest 验证测试已被发现并可执行。
+5. 如果修改了测试代码但无需新增 add_test() 入口，必须在回复中说明原因，例如复用了已有测试目标或已有 CTest 注册入口。
 
 ---
 

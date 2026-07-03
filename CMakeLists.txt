@@ -14,42 +14,91 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Export compile commands for IDE integration
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+enable_testing()
+
 # Find vcpkg-managed packages
 find_package(SDL3 CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
 
 # Add executable
+add_library(RaythmDemoPlatform
+    src/Platform/Window.cpp
+)
+
+target_include_directories(RaythmDemoPlatform PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(RaythmDemoPlatform PUBLIC
+    volk::volk
+    SDL3::SDL3
+)
+
 add_executable(RaythmDemo
     src/main.cpp
+)
+
+add_executable(RaythmDemoEnvironmentTest
+    tests/environment_test.cpp
     src/miniaudio_impl.cpp
 )
 
-target_include_directories(RaythmDemo PRIVATE
+add_executable(RaythmDemoWindowTest
+    tests/window_test.cpp
+)
+
+target_include_directories(RaythmDemoEnvironmentTest PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/miniaudio
 )
 
 # Link libraries
-target_link_libraries(RaythmDemo PRIVATE
+target_link_libraries(RaythmDemoEnvironmentTest PRIVATE
     volk::volk
     SDL3::SDL3
     nlohmann_json::nlohmann_json
 )
 
+target_link_libraries(RaythmDemoWindowTest PRIVATE
+    RaythmDemoPlatform
+)
+
+add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
+add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
+
 # Platform-specific settings
 if(WIN32)
     # Windows-specific settings
+    target_compile_definitions(RaythmDemoPlatform PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemo PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoEnvironmentTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoWindowTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
 
     if(MSVC)
+        target_compile_options(RaythmDemoPlatform PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
+        target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)
     # Linux-specific settings
-    target_link_libraries(RaythmDemo PRIVATE
+    target_link_libraries(RaythmDemoPlatform PUBLIC
+        ${CMAKE_DL_LIBS}
+        pthread
+    )
+    target_link_libraries(RaythmDemoEnvironmentTest PRIVATE
         ${CMAKE_DL_LIBS}
         pthread
     )

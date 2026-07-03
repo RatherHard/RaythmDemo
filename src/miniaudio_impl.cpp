@@ -1,5 +1,5 @@
 // RaythmDemo - miniaudio Implementation
-// This file compiles the miniaudio library implementation
+// Compiles the single-header miniaudio implementation in exactly one translation unit.
 // Author: RatherHard
 // Date: 2026-07-03
 
