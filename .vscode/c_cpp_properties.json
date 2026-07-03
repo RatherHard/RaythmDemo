@@ -4,6 +4,7 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/third_party/miniaudio",
                 "${env:VULKAN_SDK}/Include",
                 "${workspaceFolder}/build/vcpkg_installed/x64-windows/include"
             ],
@@ -23,6 +24,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/third_party/miniaudio",
                 "/usr/include/vulkan",
                 "${workspaceFolder}/build/vcpkg_installed/x64-linux/include"
             ],

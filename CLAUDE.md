@@ -18,7 +18,7 @@
 | **构建系统** | CMake | 3.20+ |
 | **开发环境** | VSCode | 配合 C++ 扩展 |
 | **音频引擎** | miniaudio | 单头文件库，低延迟音频 |
-| **图形渲染** | Vulkan | 现代跨平台图形 API |
+| **图形渲染** | Vulkan/Volk | 现代跨平台图形 API |
 | **窗口与输入** | SDL3 | 跨平台窗口、输入事件管理 |
 | **JSON 解析** | nlohmann/json | Modern C++ JSON 库 |
 
@@ -34,6 +34,36 @@
 - 明确说明问题的严重性（性能瓶颈、安全漏洞、跨平台兼容性等）
 - 提供详细的替代方案对比（包括迁移成本）
 - 等待用户明确批准后方可变更
+
+---
+
+## 项目目录结构规范
+
+项目遵循标准化的现代 C++ 工程目录结构，所有新建文件必须归入对应目录：
+
+```
+RaythmDemo/
+├── .vscode/               # VSCode 工作区配置 (launch.json, tasks.json)
+├── assets/                # 运行时资源文件
+├── docs/                  # 项目文档
+│   ├── savedprompt/       # [系统保留] AI 提示词存档 (仅只读)
+│   └── 技术设计文档/       # 架构设计、选型说明等
+├── include/               # 核心头文件 (.hpp / .h) - 必须按模块划分子目录
+│   ├── Core/              # 核心框架 (窗口管理器、主循环、时间系统)
+│   ├── Audio/             # 音频引擎封装
+│   ├── Render/            # Vulkan 渲染后端
+│   └── Game/              # 游戏逻辑、谱面解析、实体
+├── src/                   # 源代码文件 (.cpp) - 目录结构必须与 include 镜像一致
+│   ├── Core/
+│   ├── Audio/
+│   ├── Render/
+│   ├── Game/
+│   └── main.cpp           # 程序主入口
+├── third_party/           # 第三方源码库
+│   ├── miniaudio/         # miniaudio.h
+├── CMakeLists.txt         # 顶层 CMake 构建脚本
+└── vcpkg.json             # vcpkg 依赖清单
+```
 
 ---
 

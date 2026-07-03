@@ -36,7 +36,6 @@
 ```
 
 
-
 根据技术栈规范为当前vscode开发环境进行配置
 
 ```
@@ -97,4 +96,57 @@
   - 运行任务：Ctrl+Shift+P → "Tasks: Run Task"
 
   配置已完全符合 CLAUDE.md 中的技术栈规范（C++20、CMake、Vulkan、SDL3、跨平台）。
+```
+
+
+在 CMakeLists.txt 中引入 volk
+
+```
+已成功在项目中引入 volk！
+
+  完成的修改
+
+  1. vcpkg.json - 添加 volk 依赖
+
+  "dependencies": [
+    "sdl3",
+    "nlohmann-json",
+    "volk"  // 新增
+  ]
+
+  2. CMakeLists.txt - 引入 volk 包
+
+  find_package(volk CONFIG REQUIRED)
+
+  关于 volk
+
+  volk 是 Vulkan 的元加载器（meta-loader），提供以下优势：
+
+  1. 动态加载 Vulkan 函数：无需链接 vulkan-1.lib/so，在运行时动态加载
+  2. 减少启动开销：仅加载实际使用的 Vulkan 函数
+  3. 跨平台兼容性：自动处理不同平台的 Vulkan 库加载
+  4. 性能优化：避免通过 Vulkan Loader 的间接调用，直接获取函数指针
+
+  使用方式
+
+  在 C++ 代码中：
+
+  #include <volk.h>
+
+  // 初始化 volk（在使用 Vulkan 之前）
+  VkResult result = volkInitialize();
+  if (result != VK_SUCCESS) {
+      // 错误处理
+  }
+
+  // 之后可以正常使用 Vulkan 函数
+  // volk 会自动加载所有 Vulkan 函数指针
+
+  下一步
+
+  运行以下命令安装依赖：
+
+  cmake -B build -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake
+
+  vcpkg 将自动下载并构建 SDL3、nlohmann-json 和 volk。
 ```
