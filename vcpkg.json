@@ -1,0 +1,10 @@
+{
+  "name": "raythmdemo",
+  "version": "0.1.0",
+  "description": "Cross-platform rhythm game built with C++20",
+  "dependencies": [
+    "sdl3",
+    "nlohmann-json"
+  ],
+  "builtin-baseline": "master"
+}

@@ -1,0 +1,120 @@
+# Build directories
+build/
+out/
+bin/
+lib/
+*.dir/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+install_manifest.txt
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# IDE - VSCode
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.vscode/.ropeproject
+**/.vscode/.ropeproject
+
+# IDE - Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE - CLion / JetBrains
+.idea/
+cmake-build-*/
+
+# Compiled Object files
+*.o
+*.obj
+*.lo
+*.slo
+*.ko
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+*.la
+*.lo
+
+# Executables
+*.exe
+*.out
+*.app
+RaythmDemo
+RaythmDemo.exe
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+*.ilk
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Package manager
+*.tar.gz
+*.zip
+*.7z
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Documentation generated
+docs/html/
+docs/latex/
+Doxyfile.bak
+
+# Testing
+Testing/
+CTestCostData.txt
+
+# Code coverage
+*.gcda
+*.gcno
+*.gcov
+coverage/

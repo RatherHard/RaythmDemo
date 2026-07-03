@@ -21,13 +21,12 @@
 | **图形渲染** | Vulkan | 现代跨平台图形 API |
 | **窗口与输入** | SDL3 | 跨平台窗口、输入事件管理 |
 | **JSON 解析** | nlohmann/json | Modern C++ JSON 库 |
-| **编辑器 GUI** | Dear ImGui | 即时模式 GUI，配合 ImPlot 绘制波形 |
 
 ### 技术选型约束
 
 在开发过程中，你必须：
 
-1. **遵循既定技术选型**：不得建议或使用其他图形 API（如 OpenGL、DirectX）、音频库（如 FMOD、PortAudio）或 GUI 框架（如 Qt、wxWidgets）
+1. **遵循既定技术选型**：不得建议或使用其他图形 API（如 OpenGL、DirectX）、音频库（如 FMOD、PortAudio）
 2. **保持 C++20 标准**：积极使用现代 C++ 特性（concepts、ranges、coroutines），但不得引入 C++23 特性
 3. **平台兼容性优先**：任何新增代码必须同时支持 Windows 和 Linux
 
@@ -67,7 +66,7 @@
 
 ### 内存安全规范
 
-- 彻底遵循 RAI
+- 彻底遵循 RAII
 - 优先使用智能指针，禁止裸 new/delete
 - 用容器代替手动动态数组
 
@@ -77,7 +76,7 @@
 
 ### 文档版本记录规范
 
-所有技术文档（位于 `docs/` 目录下）必须在文档末尾添加版本历史表格：
+所有技术文档（位于 `docs/` 目录下）必须在文档末尾添加版本历史表格（savedprompt 目录除外）：
 
 ```markdown
 ## 版本历史
