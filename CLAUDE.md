@@ -49,12 +49,14 @@ RaythmDemo/
 │   ├── savedprompt/       # [系统保留] AI 提示词存档 (仅只读)
 │   └── 技术设计文档/       # 架构设计、选型说明等
 ├── include/               # 核心头文件 (.hpp / .h) - 必须按模块划分子目录
-│   ├── Core/              # 核心框架 (窗口管理器、主循环、时间系统)
+│   ├── Core/              # 核心框架 (无平台依赖的基础设施、主循环、时间系统)
+│   ├── Platform/          # SDL3 后端、窗口、输入、系统事件封装
 │   ├── Audio/             # 音频引擎封装
 │   ├── Render/            # Vulkan 渲染后端
 │   └── Game/              # 游戏逻辑、谱面解析、实体
 ├── src/                   # 源代码文件 (.cpp) - 目录结构必须与 include 镜像一致
 │   ├── Core/
+│   ├── Platform/
 │   ├── Audio/
 │   ├── Render/
 │   ├── Game/
@@ -99,6 +101,11 @@ RaythmDemo/
 - 彻底遵循 RAII
 - 优先使用智能指针，禁止裸 new/delete
 - 用容器代替手动动态数组
+
+### Vulkan 与 Volk 使用规范
+
+- **头文件引入红线**: 任何需要调用 Vulkan API 的文件，必须使用 #include <volk.h>。绝对禁止直接出现 #include <vulkan/vulkan.h>。
+- **初始化顺序**: 在程序生命周期中，必须保证 volkInitialize() 是被执行的第一个 Vulkan 函数。在创建 VkInstance 后，必须立刻调用 volkLoadInstance(instance)。
 
 ---
 
