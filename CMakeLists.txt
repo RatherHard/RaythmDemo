@@ -24,6 +24,7 @@ find_package(volk CONFIG REQUIRED)
 # Add executable
 add_library(RaythmDemoPlatform
     src/Platform/EventPump.cpp
+    src/Platform/InputState.cpp
     src/Platform/Window.cpp
 )
 
@@ -66,6 +67,10 @@ add_executable(RaythmDemoWindowTest
     tests/window_test.cpp
 )
 
+add_executable(RaythmDemoInputStateTest
+    tests/input_state_test.cpp
+)
+
 add_executable(RaythmDemoRenderTest
     tests/render_test.cpp
 )
@@ -85,12 +90,17 @@ target_link_libraries(RaythmDemoWindowTest PRIVATE
     RaythmDemoPlatform
 )
 
+target_link_libraries(RaythmDemoInputStateTest PRIVATE
+    RaythmDemoPlatform
+)
+
 target_link_libraries(RaythmDemoRenderTest PRIVATE
     RaythmDemoRender
 )
 
 add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
+add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 
 # Platform-specific settings
@@ -116,6 +126,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoInputStateTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoRenderTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -127,6 +141,7 @@ if(WIN32)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
         target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoInputStateTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)

@@ -4,6 +4,7 @@
 // Date: 2026-07-04
 
 #include "Platform/EventPump.hpp"
+#include "Platform/InputState.hpp"
 #include "Platform/Window.hpp"
 #include "Render/Renderer.hpp"
 
@@ -58,10 +59,13 @@ int main(int argc, char* argv[])
         Raythm::Platform::Window window(makeWindowOptions());
         Raythm::Render::Renderer renderer(window);
         Raythm::Platform::EventPump eventPump{};
+        Raythm::Platform::InputState inputState{};
         window.show();
 
         while (!window.shouldClose())
         {
+            inputState.beginFrame();
+
             Raythm::Platform::PlatformEvent event{};
             while (eventPump.pollEvent(event, window.getWindowId()))
             {
@@ -69,6 +73,14 @@ int main(int argc, char* argv[])
                 {
                     window.applyEvent(event.window);
                     renderer.handleWindowEvent(event.window);
+                    if (event.window.type == Raythm::Platform::WindowEventType::FocusLost)
+                    {
+                        inputState.clear();
+                    }
+                }
+                else if (event.type == Raythm::Platform::PlatformEventType::Input)
+                {
+                    inputState.handleInputEvent(event.input);
                 }
             }
 
