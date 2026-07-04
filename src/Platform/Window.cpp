@@ -11,7 +11,7 @@
 
 #include <SDL3/SDL_vulkan.h>
 
-namespace Raythm
+namespace Raythm::Platform
 {
     namespace
     {

@@ -13,7 +13,7 @@
 #include <SDL3/SDL.h>
 #include <volk.h>
 
-namespace Raythm
+namespace Raythm::Platform
 {
     /**
      * @brief Configuration used to create a platform window.

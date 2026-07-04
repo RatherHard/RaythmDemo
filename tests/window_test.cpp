@@ -13,6 +13,8 @@
 
 namespace
 {
+    namespace Platform = Raythm::Platform;
+
     /** @brief Logical width used by hidden windows in these tests. */
     constexpr int TEST_WINDOW_WIDTH = 320;
 
@@ -43,7 +45,7 @@ namespace
      * @param expectedType Event type that should appear in the wrapper event stream.
      * @return True when the expected event type is observed before the queue is exhausted.
      */
-    bool pollUntil(Raythm::Window& window, Raythm::WindowEvent& event, Raythm::WindowEventType expectedType)
+    bool pollUntil(Platform::Window& window, Platform::WindowEvent& event, Platform::WindowEventType expectedType)
     {
         while (window.pollEvent(event))
         {
@@ -79,9 +81,9 @@ namespace
      * @brief Creates hidden, non-Vulkan options suitable for deterministic window wrapper tests.
      * @return Window options that avoid visible UI and Vulkan platform requirements by default.
      */
-    Raythm::WindowOptions makeHiddenOptions()
+    Platform::WindowOptions makeHiddenOptions()
     {
-        Raythm::WindowOptions options{};
+        Platform::WindowOptions options{};
         options.title = "RaythmDemo Window Test";
         options.width = TEST_WINDOW_WIDTH;
         options.height = TEST_WINDOW_HEIGHT;
@@ -97,7 +99,7 @@ namespace
      */
     bool testWindowLifecycleAndState()
     {
-        Raythm::Window window(makeHiddenOptions());
+        Platform::Window window(makeHiddenOptions());
 
         auto [width, height] = window.getSize();
         auto [drawableWidth, drawableHeight] = window.getDrawableSize();
@@ -115,10 +117,10 @@ namespace
         window.setBorderlessFullscreen(false);
         passed &= expect(!window.isBorderlessFullscreen(), "fullscreen disabled should keep the window windowed");
 
-        Raythm::Window movedWindow(std::move(window));
+        Platform::Window movedWindow(std::move(window));
         passed &= expect(movedWindow.getNativeHandle() != nullptr, "move construction should transfer native handle");
 
-        Raythm::Window assignedWindow(makeHiddenOptions());
+        Platform::Window assignedWindow(makeHiddenOptions());
         assignedWindow = std::move(movedWindow);
         passed &= expect(assignedWindow.getNativeHandle() != nullptr, "move assignment should transfer native handle");
 
@@ -131,16 +133,16 @@ namespace
      */
     bool testWindowEventTranslation()
     {
-        Raythm::Window window(makeHiddenOptions());
+        Platform::Window window(makeHiddenOptions());
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
         const SDL_WindowID windowId = SDL_GetWindowID(window.getNativeHandle());
 
         bool passed = true;
         passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, windowId, 11, 22), "should push moved event");
 
-        Raythm::WindowEvent event{};
-        passed &= expect(pollUntil(window, event, Raythm::WindowEventType::Moved), "moved event should be translated");
-        passed &= expect(event.type == Raythm::WindowEventType::Moved, "moved event type should match");
+        Platform::WindowEvent event{};
+        passed &= expect(pollUntil(window, event, Platform::WindowEventType::Moved), "moved event should be translated");
+        passed &= expect(event.type == Platform::WindowEventType::Moved, "moved event type should match");
         passed &= expect(event.x == 11, "moved event x should match");
         passed &= expect(event.y == 22, "moved event y should match");
 
@@ -153,7 +155,7 @@ namespace
      */
     bool testEventFiltering()
     {
-        Raythm::Window window(makeHiddenOptions());
+        Platform::Window window(makeHiddenOptions());
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 
         SDL_Event keyboardEvent{};
@@ -164,7 +166,7 @@ namespace
             return false;
         }
 
-        Raythm::WindowEvent event{};
+        Platform::WindowEvent event{};
         const bool noWindowEvent = !window.pollEvent(event);
         SDL_Event preservedEvent{};
         const bool inputEventPreserved = SDL_PollEvent(&preservedEvent);
@@ -183,7 +185,7 @@ namespace
      */
     bool testForeignWindowEventPreserved()
     {
-        Raythm::Window window(makeHiddenOptions());
+        Platform::Window window(makeHiddenOptions());
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 
         SDL_Window* foreignWindow = SDL_CreateWindow("RaythmDemo Foreign Test", 160, 120, SDL_WINDOW_HIDDEN);
@@ -196,7 +198,7 @@ namespace
         const SDL_WindowID foreignWindowId = SDL_GetWindowID(foreignWindow);
         const bool pushed = pushWindowEvent(SDL_EVENT_WINDOW_MOVED, foreignWindowId, 44, 55);
 
-        Raythm::WindowEvent event{};
+        Platform::WindowEvent event{};
         const bool noOwnedEvent = !window.pollEvent(event);
 
         SDL_Event preservedEvent{};
@@ -230,12 +232,12 @@ namespace
      */
     bool testVulkanExtensionQuery()
     {
-        Raythm::WindowOptions options = makeHiddenOptions();
+        Platform::WindowOptions options = makeHiddenOptions();
         options.vulkanSurface = true;
 
         try
         {
-            Raythm::Window window(options);
+            Platform::Window window(options);
             const auto extensions = window.getRequiredVulkanInstanceExtensions();
 
             bool passed = true;
