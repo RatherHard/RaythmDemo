@@ -1,5 +1,5 @@
 // RaythmDemo - SDL Window Wrapper
-// Defines the engine-facing RAII abstraction over SDL3 windows.
+// Defines the engine-facing RAII abstraction over SDL3 windows and window state.
 // Author: RatherHard
 // Date: 2026-07-04
 
@@ -124,7 +124,7 @@ namespace Raythm::Platform
     };
 
     /**
-     * @brief RAII owner for an SDL window and window-system events.
+     * @brief RAII owner for an SDL window and its engine-facing state.
      */
     class Window
     {
@@ -163,12 +163,11 @@ namespace Raythm::Platform
         Window& operator=(Window&& other) noexcept;
 
         /**
-         * @brief Polls the SDL queue until a window event for this window is found.
-         * @param event Receives the translated window event.
-         * @return True when a translated window event was produced.
-         * @note Window events for other SDL windows are replayed so other systems can still observe them.
+         * @brief Applies a translated window event to this window's sticky state.
+         * @param event Engine-facing window event produced by the platform event pump.
+         * @note Close and quit events set shouldClose; other events are currently observed by consumers directly.
          */
-        bool pollEvent(WindowEvent& event);
+        void applyEvent(const WindowEvent& event) noexcept;
 
         /**
          * @brief Creates a Vulkan surface for this window.
@@ -228,6 +227,12 @@ namespace Raythm::Platform
         std::pair<int, int> getDrawableSize() const noexcept;
 
         /**
+         * @brief Returns the SDL window identifier used to route platform events.
+         * @return Native SDL window ID, or zero after this object has been moved from.
+         */
+        SDL_WindowID getWindowId() const noexcept;
+
+        /**
          * @brief Returns the owned SDL window handle without transferring ownership.
          * @return Native SDL window pointer, or nullptr after this object has been moved from.
          */
@@ -240,15 +245,6 @@ namespace Raythm::Platform
          * @return SDL bitmask used by SDL_CreateWindow.
          */
         static SDL_WindowFlags buildWindowFlags(const WindowOptions& options) noexcept;
-
-        /**
-         * @brief Converts an SDL window event for this native window into an engine event payload.
-         * @param sdlEvent SDL event read from the event queue.
-         * @param event Receives the translated engine-facing event on success.
-         * @param windowId SDL identifier for the owned native window.
-         * @return True when the SDL event belongs to this window and maps to a supported window event.
-         */
-        static bool translateEvent(const SDL_Event& sdlEvent, WindowEvent& event, SDL_WindowID windowId) noexcept;
 
         /** @brief Owned SDL window handle; nullptr only after moves or failed construction cleanup. */
         SDL_Window* m_window = nullptr;

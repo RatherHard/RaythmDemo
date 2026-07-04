@@ -1,5 +1,5 @@
 // RaythmDemo - SDL Window Wrapper Implementation
-// Implements SDL3 window lifetime, Vulkan surface creation, and event translation.
+// Implements SDL3 window lifetime, Vulkan surface creation, and window state updates.
 // Author: RatherHard
 // Date: 2026-07-04
 
@@ -110,48 +110,17 @@ namespace Raythm::Platform
         return *this;
     }
 
-    bool Window::pollEvent(WindowEvent& event)
+    void Window::applyEvent(const WindowEvent& event) noexcept
     {
-        SDL_Event sdlEvent{};
-        while (SDL_PeepEvents(&sdlEvent, 1, SDL_PEEKEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST) == 1)
+        switch (event.type)
         {
-            if (sdlEvent.type == SDL_EVENT_QUIT)
-            {
-                SDL_PeepEvents(&sdlEvent, 1, SDL_GETEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT);
-                event = {};
-                event.type = WindowEventType::QuitRequested;
-                m_shouldClose = true;
-                return true;
-            }
-
-            if (sdlEvent.type < SDL_EVENT_WINDOW_FIRST || sdlEvent.type > SDL_EVENT_WINDOW_LAST)
-            {
-                return false;
-            }
-
-            if (sdlEvent.window.windowID != m_windowId)
-            {
-                return false;
-            }
-
-            SDL_PeepEvents(&sdlEvent, 1, SDL_GETEVENT, SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST);
-
-            WindowEvent translatedEvent{};
-            if (!translateEvent(sdlEvent, translatedEvent, m_windowId))
-            {
-                continue;
-            }
-
-            if (translatedEvent.type == WindowEventType::CloseRequested)
-            {
-                m_shouldClose = true;
-            }
-
-            event = translatedEvent;
-            return true;
+        case WindowEventType::CloseRequested:
+        case WindowEventType::QuitRequested:
+            m_shouldClose = true;
+            break;
+        default:
+            break;
         }
-
-        return false;
     }
 
     VkSurfaceKHR Window::createVulkanSurface(VkInstance instance) const
@@ -275,6 +244,11 @@ namespace Raythm::Platform
         return {width, height};
     }
 
+    SDL_WindowID Window::getWindowId() const noexcept
+    {
+        return m_windowId;
+    }
+
     SDL_Window* Window::getNativeHandle() const noexcept
     {
         return m_window;
@@ -304,89 +278,5 @@ namespace Raythm::Platform
         }
 
         return flags;
-    }
-
-    bool Window::translateEvent(const SDL_Event& sdlEvent, WindowEvent& event, SDL_WindowID windowId) noexcept
-    {
-        if (sdlEvent.type == SDL_EVENT_QUIT)
-        {
-            event = {};
-            event.type = WindowEventType::QuitRequested;
-            return true;
-        }
-
-        if (sdlEvent.type < SDL_EVENT_WINDOW_FIRST || sdlEvent.type > SDL_EVENT_WINDOW_LAST)
-        {
-            return false;
-        }
-
-        if (sdlEvent.window.windowID != windowId)
-        {
-            return false;
-        }
-
-        event = {};
-        switch (sdlEvent.type)
-        {
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-            event.type = WindowEventType::CloseRequested;
-            break;
-        case SDL_EVENT_WINDOW_SHOWN:
-            event.type = WindowEventType::Shown;
-            break;
-        case SDL_EVENT_WINDOW_HIDDEN:
-            event.type = WindowEventType::Hidden;
-            break;
-        case SDL_EVENT_WINDOW_EXPOSED:
-            event.type = WindowEventType::Exposed;
-            break;
-        case SDL_EVENT_WINDOW_MOVED:
-            event.type = WindowEventType::Moved;
-            event.x = sdlEvent.window.data1;
-            event.y = sdlEvent.window.data2;
-            break;
-        case SDL_EVENT_WINDOW_RESIZED:
-            event.type = WindowEventType::Resized;
-            event.width = sdlEvent.window.data1;
-            event.height = sdlEvent.window.data2;
-            break;
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            event.type = WindowEventType::PixelSizeChanged;
-            event.width = sdlEvent.window.data1;
-            event.height = sdlEvent.window.data2;
-            break;
-        case SDL_EVENT_WINDOW_MINIMIZED:
-            event.type = WindowEventType::Minimized;
-            break;
-        case SDL_EVENT_WINDOW_MAXIMIZED:
-            event.type = WindowEventType::Maximized;
-            break;
-        case SDL_EVENT_WINDOW_RESTORED:
-            event.type = WindowEventType::Restored;
-            break;
-        case SDL_EVENT_WINDOW_MOUSE_ENTER:
-            event.type = WindowEventType::MouseEntered;
-            break;
-        case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-            event.type = WindowEventType::MouseLeft;
-            break;
-        case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            event.type = WindowEventType::FocusGained;
-            break;
-        case SDL_EVENT_WINDOW_FOCUS_LOST:
-            event.type = WindowEventType::FocusLost;
-            break;
-        case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
-            event.type = WindowEventType::Exposed;
-            break;
-        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-            event.type = WindowEventType::DisplayChanged;
-            event.displayId = static_cast<std::uint32_t>(sdlEvent.window.data1);
-            break;
-        default:
-            return false;
-        }
-
-        return true;
     }
 }

@@ -1,8 +1,9 @@
 // RaythmDemo - SDL Window Wrapper Tests
-// Exercises the SDL-backed Window wrapper lifecycle, event filtering, and Vulkan extension query behavior.
+// Exercises the SDL-backed Window wrapper lifecycle, event pump, and Vulkan extension query behavior.
 // Author: RatherHard
 // Date: 2026-07-04
 
+#include "Platform/EventPump.hpp"
 #include "Platform/Window.hpp"
 
 #include <iostream>
@@ -40,14 +41,20 @@ namespace
 
     /**
      * @brief Polls translated window events until the expected event type appears.
-     * @param window Window wrapper whose SDL event stream is being checked.
+     * @param eventPump SDL event pump being checked.
+     * @param windowId SDL window identifier that should own translated events.
      * @param event Receives the matching event payload when one is found.
      * @param expectedType Event type that should appear in the wrapper event stream.
      * @return True when the expected event type is observed before the queue is exhausted.
      */
-    bool pollUntil(Platform::Window& window, Platform::WindowEvent& event, Platform::WindowEventType expectedType)
+    bool pollUntil(
+        Platform::EventPump& eventPump,
+        SDL_WindowID windowId,
+        Platform::WindowEvent& event,
+        Platform::WindowEventType expectedType
+    )
     {
-        while (window.pollEvent(event))
+        while (eventPump.pollWindowEvent(event, windowId))
         {
             if (event.type == expectedType)
             {
@@ -106,6 +113,7 @@ namespace
 
         bool passed = true;
         passed &= expect(window.getNativeHandle() != nullptr, "native window handle should be available");
+        passed &= expect(window.getWindowId() != 0, "window id should be available");
         passed &= expect(width == TEST_WINDOW_WIDTH, "window width should match creation options");
         passed &= expect(height == TEST_WINDOW_HEIGHT, "window height should match creation options");
         passed &= expect(drawableWidth > 0, "drawable width should be positive");
@@ -131,17 +139,19 @@ namespace
      * @brief Verifies that SDL window events for the owned window become engine-facing window events.
      * @return True when a synthetic move event is translated with its payload intact.
      */
-    bool testWindowEventTranslation()
+    bool testEventPumpWindowEventTranslation()
     {
         Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
-        const SDL_WindowID windowId = SDL_GetWindowID(window.getNativeHandle());
+        const SDL_WindowID windowId = window.getWindowId();
 
         bool passed = true;
         passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, windowId, 11, 22), "should push moved event");
 
         Platform::WindowEvent event{};
-        passed &= expect(pollUntil(window, event, Platform::WindowEventType::Moved), "moved event should be translated");
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::WindowEventType::Moved),
+                         "moved event should be translated");
         passed &= expect(event.type == Platform::WindowEventType::Moved, "moved event type should match");
         passed &= expect(event.x == 11, "moved event x should match");
         passed &= expect(event.y == 22, "moved event y should match");
@@ -150,42 +160,39 @@ namespace
     }
 
     /**
-     * @brief Verifies that non-window SDL events remain available to other subsystems.
-     * @return True when keyboard events are not consumed by Window::pollEvent.
+     * @brief Verifies that non-window SDL events do not block later window lifecycle events.
+     * @return True when a keyboard event ahead of a close event is consumed and the close event is translated.
      */
-    bool testEventFiltering()
+    bool testEventPumpSkipsNonWindowEventsBeforeWindowEvent()
     {
         Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 
         SDL_Event keyboardEvent{};
         keyboardEvent.type = SDL_EVENT_KEY_DOWN;
-        if (!SDL_PushEvent(&keyboardEvent))
-        {
-            std::cerr << "FAILED: should push keyboard event" << std::endl;
-            return false;
-        }
-
-        Platform::WindowEvent event{};
-        const bool noWindowEvent = !window.pollEvent(event);
-        SDL_Event preservedEvent{};
-        const bool inputEventPreserved = SDL_PollEvent(&preservedEvent);
 
         bool passed = true;
-        passed &= expect(noWindowEvent, "input events should not be translated as window events");
-        passed &= expect(inputEventPreserved, "input events should remain available to other systems");
-        passed &= expect(preservedEvent.type == SDL_EVENT_KEY_DOWN, "preserved event should be the keyboard event");
+        passed &= expect(SDL_PushEvent(&keyboardEvent), "should push keyboard event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED, window.getWindowId()),
+                         "should push close event after keyboard event");
+
+        Platform::WindowEvent event{};
+        passed &= expect(eventPump.pollWindowEvent(event, window.getWindowId()),
+                         "window event after non-window event should be reachable");
+        passed &= expect(event.type == Platform::WindowEventType::CloseRequested, "close event type should match");
 
         return passed;
     }
 
     /**
-     * @brief Verifies that window events for another SDL window are replayed instead of consumed.
-     * @return True when a foreign window event remains visible after polling the owned window.
+     * @brief Verifies that events for another SDL window do not block the requested window.
+     * @return True when an owned window event after a foreign event remains reachable.
      */
-    bool testForeignWindowEventPreserved()
+    bool testEventPumpSkipsForeignWindowEventsBeforeOwnedEvent()
     {
         Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 
         SDL_Window* foreignWindow = SDL_CreateWindow("RaythmDemo Foreign Test", 160, 120, SDL_WINDOW_HIDDEN);
@@ -196,30 +203,19 @@ namespace
         }
 
         const SDL_WindowID foreignWindowId = SDL_GetWindowID(foreignWindow);
-        const bool pushed = pushWindowEvent(SDL_EVENT_WINDOW_MOVED, foreignWindowId, 44, 55);
-
-        Platform::WindowEvent event{};
-        const bool noOwnedEvent = !window.pollEvent(event);
-
-        SDL_Event preservedEvent{};
-        bool foreignEventPreserved = false;
-        while (SDL_PeepEvents(&preservedEvent, 1, SDL_GETEVENT, SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST) == 1)
-        {
-            if (preservedEvent.window.windowID == foreignWindowId)
-            {
-                foreignEventPreserved = true;
-                break;
-            }
-        }
 
         bool passed = true;
-        passed &= expect(pushed, "should push foreign window event");
-        passed &= expect(noOwnedEvent, "foreign window event should not be translated");
-        passed &= expect(foreignEventPreserved, "foreign window event should remain available");
-        passed &= expect(preservedEvent.window.windowID == foreignWindowId,
-                         "preserved window event should belong to the foreign window");
-        passed &= expect(preservedEvent.type >= SDL_EVENT_WINDOW_FIRST && preservedEvent.type <= SDL_EVENT_WINDOW_LAST,
-                         "preserved event should be a window event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, foreignWindowId, 44, 55),
+                         "should push foreign window event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_RESIZED, window.getWindowId(), 640, 480),
+                         "should push owned resize event after foreign event");
+
+        Platform::WindowEvent event{};
+        passed &= expect(eventPump.pollWindowEvent(event, window.getWindowId()),
+                         "owned window event after foreign event should be reachable");
+        passed &= expect(event.type == Platform::WindowEventType::Resized, "owned resize event type should match");
+        passed &= expect(event.width == 640, "owned resize event width should match");
+        passed &= expect(event.height == 480, "owned resize event height should match");
 
         SDL_DestroyWindow(foreignWindow);
         return passed;
@@ -229,18 +225,19 @@ namespace
      * @brief Verifies that unsupported owned window events are consumed instead of replayed forever.
      * @return True when an unsupported event does not block a later supported event.
      */
-    bool testUnsupportedOwnedWindowEventIsConsumed()
+    bool testEventPumpConsumesUnsupportedOwnedWindowEvent()
     {
         Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
-        const SDL_WindowID windowId = SDL_GetWindowID(window.getNativeHandle());
+        const SDL_WindowID windowId = window.getWindowId();
 
         bool passed = true;
         passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_HIT_TEST, windowId), "should push unsupported hit-test event");
         passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, windowId, 77, 88), "should push moved event after hit-test");
 
         Platform::WindowEvent event{};
-        passed &= expect(pollUntil(window, event, Platform::WindowEventType::Moved),
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::WindowEventType::Moved),
                          "supported event after unsupported event should be reachable");
         passed &= expect(event.x == 77, "moved event after unsupported event should keep x payload");
         passed &= expect(event.y == 88, "moved event after unsupported event should keep y payload");
@@ -255,6 +252,7 @@ namespace
     bool testQuitEventRequestsClose()
     {
         Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
         SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
 
         SDL_Event quitEvent{};
@@ -263,9 +261,29 @@ namespace
         passed &= expect(SDL_PushEvent(&quitEvent), "should push quit event");
 
         Platform::WindowEvent event{};
-        passed &= expect(window.pollEvent(event), "quit event should be translated");
+        passed &= expect(eventPump.pollWindowEvent(event, window.getWindowId()), "quit event should be translated");
         passed &= expect(event.type == Platform::WindowEventType::QuitRequested, "quit event type should match");
+
+        window.applyEvent(event);
         passed &= expect(window.shouldClose(), "quit event should set close flag");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies that close-request events apply a sticky close state to the window abstraction.
+     * @return True when a close-request event sets shouldClose.
+     */
+    bool testCloseRequestedEventRequestsClose()
+    {
+        Platform::Window window(makeHiddenOptions());
+        bool passed = true;
+        passed &= expect(!window.shouldClose(), "new window should not request close");
+
+        Platform::WindowEvent event{};
+        event.type = Platform::WindowEventType::CloseRequested;
+        window.applyEvent(event);
+        passed &= expect(window.shouldClose(), "close-request event should set close flag");
 
         return passed;
     }
@@ -325,11 +343,12 @@ int main(int argc, char* argv[])
     try
     {
         allTestsPassed &= testWindowLifecycleAndState();
-        allTestsPassed &= testWindowEventTranslation();
-        allTestsPassed &= testEventFiltering();
-        allTestsPassed &= testForeignWindowEventPreserved();
-        allTestsPassed &= testUnsupportedOwnedWindowEventIsConsumed();
+        allTestsPassed &= testEventPumpWindowEventTranslation();
+        allTestsPassed &= testEventPumpSkipsNonWindowEventsBeforeWindowEvent();
+        allTestsPassed &= testEventPumpSkipsForeignWindowEventsBeforeOwnedEvent();
+        allTestsPassed &= testEventPumpConsumesUnsupportedOwnedWindowEvent();
         allTestsPassed &= testQuitEventRequestsClose();
+        allTestsPassed &= testCloseRequestedEventRequestsClose();
         allTestsPassed &= testVulkanExtensionQuery();
     }
     catch (const std::exception& exception)

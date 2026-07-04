@@ -3,6 +3,7 @@
 // Author: RatherHard
 // Date: 2026-07-04
 
+#include "Platform/EventPump.hpp"
 #include "Platform/Window.hpp"
 #include "Render/Renderer.hpp"
 
@@ -56,13 +57,15 @@ int main(int argc, char* argv[])
     {
         Raythm::Platform::Window window(makeWindowOptions());
         Raythm::Render::Renderer renderer(window);
+        Raythm::Platform::EventPump eventPump{};
         window.show();
 
         while (!window.shouldClose())
         {
             Raythm::Platform::WindowEvent event{};
-            while (window.pollEvent(event))
+            while (eventPump.pollWindowEvent(event, window.getWindowId()))
             {
+                window.applyEvent(event);
                 renderer.handleWindowEvent(event);
             }
 

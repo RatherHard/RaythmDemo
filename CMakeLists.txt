@@ -23,6 +23,7 @@ find_package(volk CONFIG REQUIRED)
 
 # Add executable
 add_library(RaythmDemoPlatform
+    src/Platform/EventPump.cpp
     src/Platform/Window.cpp
 )
 
