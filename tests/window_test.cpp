@@ -7,7 +7,6 @@
 #include "Platform/Window.hpp"
 
 #include <iostream>
-#include <stdexcept>
 #include <string>
 
 #include <SDL3/SDL.h>
