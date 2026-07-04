@@ -1,6 +1,5 @@
 # Build directories
-build/
-build-review/
+build*/
 out/
 bin/
 lib/

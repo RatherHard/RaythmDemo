@@ -4,7 +4,7 @@
 
 - Do not call `apply_patch` from Bash.
 - Use Claude Code's Edit or MultiEdit tools for file changes.
-- When reading Markdown or source files, do not pass PDF-specific parameters such as `pages`.
+- When using the Read tool for paginated documents, omit the `pages` parameter if no page range is specified. Never pass `pages: ""`. Valid values are like `"1"`, `"1-5"`, or `"10-20"`.
 - If a tool rejects an argument, retry once with only the documented required arguments.
 
 ---
