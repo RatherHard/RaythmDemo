@@ -1,5 +1,14 @@
 # RaythmDemo - System Prompts
 
+## Tool usage constraints
+
+- Do not call `apply_patch` from Bash.
+- Use Claude Code's Edit or MultiEdit tools for file changes.
+- When reading Markdown or source files, do not pass PDF-specific parameters such as `pages`.
+- If a tool rejects an argument, retry once with only the documented required arguments.
+
+---
+
 ## 项目概述
 
 本项目是一个基于 C++ 的跨平台音乐节奏游戏（音游），目标平台为 **Windows** 和 **Linux**。采用自研架构，以实现极致低延迟、精确的音画同步，以及高性能的谱面渲染能力。

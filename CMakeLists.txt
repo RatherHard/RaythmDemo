@@ -50,12 +50,25 @@ target_link_libraries(RaythmDemoRender PUBLIC
     volk::volk
 )
 
+add_library(RaythmDemoCore
+    src/Core/Application.cpp
+    src/Core/Time.cpp
+)
+
+target_include_directories(RaythmDemoCore PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(RaythmDemoCore PUBLIC
+    RaythmDemoRender
+)
+
 add_executable(RaythmDemo
     src/main.cpp
 )
 
 target_link_libraries(RaythmDemo PRIVATE
-    RaythmDemoRender
+    RaythmDemoCore
 )
 
 add_executable(RaythmDemoEnvironmentTest
@@ -69,6 +82,10 @@ add_executable(RaythmDemoWindowTest
 
 add_executable(RaythmDemoInputStateTest
     tests/input_state_test.cpp
+)
+
+add_executable(RaythmDemoCoreTest
+    tests/core_test.cpp
 )
 
 add_executable(RaythmDemoRenderTest
@@ -94,6 +111,10 @@ target_link_libraries(RaythmDemoInputStateTest PRIVATE
     RaythmDemoPlatform
 )
 
+target_link_libraries(RaythmDemoCoreTest PRIVATE
+    RaythmDemoCore
+)
+
 target_link_libraries(RaythmDemoRenderTest PRIVATE
     RaythmDemoRender
 )
@@ -101,6 +122,7 @@ target_link_libraries(RaythmDemoRenderTest PRIVATE
 add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
 add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
+add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 
 # Platform-specific settings
@@ -111,6 +133,10 @@ if(WIN32)
         NOMINMAX
     )
     target_compile_definitions(RaythmDemoRender PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoCore PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
@@ -130,6 +156,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoCoreTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoRenderTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -138,15 +168,21 @@ if(WIN32)
     if(MSVC)
         target_compile_options(RaythmDemoPlatform PUBLIC /utf-8)
         target_compile_options(RaythmDemoRender PUBLIC /utf-8)
+        target_compile_options(RaythmDemoCore PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
         target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoInputStateTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)
     # Linux-specific settings
     target_link_libraries(RaythmDemoPlatform PUBLIC
+        ${CMAKE_DL_LIBS}
+        pthread
+    )
+    target_link_libraries(RaythmDemoCore PUBLIC
         ${CMAKE_DL_LIBS}
         pthread
     )
