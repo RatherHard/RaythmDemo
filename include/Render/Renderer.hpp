@@ -13,6 +13,7 @@
 #include <volk.h>
 
 #include "Platform/Window.hpp"
+#include "Render/RenderStrategy.hpp"
 
 namespace Raythm::Render
 {
@@ -110,6 +111,22 @@ namespace Raythm::Render
         /** @brief Reports whether rendering is paused due to a zero-sized drawable surface. */
         bool isRenderingPaused() const noexcept;
 
+        /**
+         * @brief Replaces the pending 2D command batch for the next frame.
+         * @param commands Screen-space 2D commands submitted by the game layer.
+         * @note Commands are clipped during command-buffer recording; Vulkan handles are not exposed to callers.
+         */
+        void submit2DCommands(const std::vector<RenderCommand>& commands);
+
+        /** @brief Clears pending 2D commands without submitting a frame. */
+        void clear2DCommands() noexcept;
+
+        /**
+         * @brief Reports the number of commands currently queued for the next frame.
+         * @return Pending 2D command count.
+         */
+        std::size_t getPending2DCommandCount() const noexcept;
+
     private:
         /** @brief Queue family indices selected for graphics and presentation work. */
         struct QueueFamilyIndices
@@ -152,6 +169,12 @@ namespace Raythm::Render
         /** @brief Creates swapchain images and image views for the current drawable size. */
         void createSwapchain();
 
+        /** @brief Creates a render pass that clears and presents swapchain color attachments. */
+        void createRenderPass();
+
+        /** @brief Creates one framebuffer for each swapchain image view. */
+        void createFramebuffers();
+
         /** @brief Creates the command pool used for transient clear commands. */
         void createCommandPool();
 
@@ -170,8 +193,8 @@ namespace Raythm::Render
         /** @brief Recreates swapchain-dependent resources after resize or surface invalidation. */
         bool recreateSwapchain();
 
-        /** @brief Records commands that transition, clear, and prepare one swapchain image for presentation. */
-        void recordClearCommandBuffer(VkCommandBuffer commandBuffer, VkImage image) const;
+        /** @brief Records commands that transition, clear, apply 2D commands, and prepare one image for presentation. */
+        void recordFrameCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex) const;
 
         /** @brief Finds graphics and presentation queue family indices for a physical device. */
         QueueFamilyIndices findQueueFamilies(VkPhysicalDevice physicalDevice) const;
@@ -181,17 +204,6 @@ namespace Raythm::Render
 
         /** @brief Checks whether the required swapchain device extension is available. */
         static bool supportsRequiredDeviceExtensions(VkPhysicalDevice physicalDevice);
-
-        /** @brief Selects the preferred surface format from the supported list. */
-        static VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats);
-
-        /** @brief Selects the preferred present mode from the supported list. */
-        static VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& presentModes, bool preferVsync);
-
-        /** @brief Chooses the swapchain extent using surface capabilities and current drawable size. */
-        static VkExtent2D chooseSwapchainExtent(
-            const VkSurfaceCapabilitiesKHR& capabilities,
-            std::pair<int, int> drawableSize) noexcept;
 
         /** @brief Platform window used as the surface owner and drawable-size source. */
         Platform::Window* m_window = nullptr;
@@ -226,6 +238,9 @@ namespace Raythm::Render
         /** @brief Swapchain whose images are cleared and presented each frame. */
         VkSwapchainKHR m_swapchain = VK_NULL_HANDLE;
 
+        /** @brief Render pass used for clear-load 2D rectangle rendering. */
+        VkRenderPass m_renderPass = VK_NULL_HANDLE;
+
         /** @brief Format of swapchain images. */
         VkFormat m_swapchainImageFormat = VK_FORMAT_UNDEFINED;
 
@@ -237,6 +252,9 @@ namespace Raythm::Render
 
         /** @brief Image views created for future render-pass compatibility and destroyed with the swapchain. */
         std::vector<VkImageView> m_swapchainImageViews;
+
+        /** @brief Framebuffers pairing swapchain image views with the render pass. */
+        std::vector<VkFramebuffer> m_swapchainFramebuffers;
 
         /** @brief Command pool used to allocate primary clear command buffers. */
         VkCommandPool m_commandPool = VK_NULL_HANDLE;
@@ -255,6 +273,9 @@ namespace Raythm::Render
 
         /** @brief Current frame-in-flight slot. */
         std::size_t m_currentFrame = 0;
+
+        /** @brief Screen-space 2D commands queued for the next frame. */
+        std::vector<RenderCommand> m_pending2DCommands;
 
         /** @brief True when swapchain recreation is required before the next present. */
         bool m_framebufferResized = false;

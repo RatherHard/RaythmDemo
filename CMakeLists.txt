@@ -37,6 +37,18 @@ target_link_libraries(RaythmDemoPlatform PUBLIC
     SDL3::SDL3
 )
 
+add_library(RaythmDemoRenderStrategy
+    src/Render/RenderStrategy.cpp
+)
+
+target_include_directories(RaythmDemoRenderStrategy PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(RaythmDemoRenderStrategy PUBLIC
+    volk::volk_headers
+)
+
 add_library(RaythmDemoRender
     src/Render/Renderer.cpp
 )
@@ -47,6 +59,7 @@ target_include_directories(RaythmDemoRender PUBLIC
 
 target_link_libraries(RaythmDemoRender PUBLIC
     RaythmDemoPlatform
+    RaythmDemoRenderStrategy
     volk::volk
 )
 
@@ -109,6 +122,10 @@ add_executable(RaythmDemoRenderTest
     tests/render_test.cpp
 )
 
+add_executable(RaythmDemoRenderStrategyTest
+    tests/render_strategy_test.cpp
+)
+
 target_include_directories(RaythmDemoEnvironmentTest PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/miniaudio
 )
@@ -140,12 +157,17 @@ target_link_libraries(RaythmDemoRenderTest PRIVATE
     RaythmDemoRender
 )
 
+target_link_libraries(RaythmDemoRenderStrategyTest PRIVATE
+    RaythmDemoRenderStrategy
+)
+
 add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
 add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
 add_test(NAME RaythmDemoAudioTest COMMAND RaythmDemoAudioTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
+add_test(NAME RaythmDemoRenderStrategyTest COMMAND RaythmDemoRenderStrategyTest)
 
 # Platform-specific settings
 if(WIN32)
@@ -155,6 +177,10 @@ if(WIN32)
         NOMINMAX
     )
     target_compile_definitions(RaythmDemoRender PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoRenderStrategy PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
@@ -194,10 +220,15 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoRenderStrategyTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
 
     if(MSVC)
         target_compile_options(RaythmDemoPlatform PUBLIC /utf-8)
         target_compile_options(RaythmDemoRender PUBLIC /utf-8)
+        target_compile_options(RaythmDemoRenderStrategy PUBLIC /utf-8)
         target_compile_options(RaythmDemoAudio PUBLIC /utf-8)
         target_compile_options(RaythmDemoCore PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
@@ -207,6 +238,7 @@ if(WIN32)
         target_compile_options(RaythmDemoAudioTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoRenderStrategyTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)
     # Linux-specific settings

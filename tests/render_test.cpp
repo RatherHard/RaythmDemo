@@ -9,6 +9,7 @@
 #include <exception>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <SDL3/SDL.h>
 
@@ -73,6 +74,20 @@ namespace
             passed &= expect(!renderer.isRenderingPaused(), "renderer should not start paused for a positive drawable size");
 
             renderer.renderFrame();
+
+            const std::vector<Render::RenderCommand> commands = {
+                {{16, 16, 48, 128}, {0.12F, 0.25F, 0.82F, 1.0F}},
+                {{0, TEST_WINDOW_HEIGHT - 40, TEST_WINDOW_WIDTH, 8}, {0.95F, 0.92F, 0.18F, 1.0F}}
+            };
+            renderer.submit2DCommands(commands);
+            passed &= expect(
+                renderer.getPending2DCommandCount() == commands.size(),
+                "renderer should retain submitted 2D commands for the next frame");
+            renderer.renderFrame();
+            renderer.clear2DCommands();
+            passed &= expect(
+                renderer.getPending2DCommandCount() == 0,
+                "renderer should clear pending 2D commands on request");
 
             Platform::WindowEvent resizeEvent{};
             resizeEvent.type = Platform::WindowEventType::PixelSizeChanged;

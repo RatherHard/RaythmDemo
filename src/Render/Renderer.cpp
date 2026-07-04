@@ -6,7 +6,6 @@
 #include "Render/Renderer.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -26,9 +25,6 @@ namespace Raythm::Render
         /** @brief Engine name passed into Vulkan instance creation. */
         constexpr const char* ENGINE_NAME = "RaythmDemo";
 
-        /** @brief Sentinel used by Vulkan to indicate that the surface controls swapchain extent directly. */
-        constexpr std::uint32_t VARIABLE_SURFACE_EXTENT = std::numeric_limits<std::uint32_t>::max();
-
         /**
          * @brief Converts a Vulkan result code into an exception with context.
          * @param message High-level failure context.
@@ -40,16 +36,6 @@ namespace Raythm::Render
             return std::runtime_error(message + " VkResult=" + std::to_string(static_cast<int>(result)));
         }
 
-        /**
-         * @brief Checks whether a vector contains a value.
-         * @param values Values to inspect.
-         * @param value Target value.
-         * @return True when the value is present.
-         */
-        bool contains(const std::vector<VkPresentModeKHR>& values, VkPresentModeKHR value) noexcept
-        {
-            return std::find(values.begin(), values.end(), value) != values.end();
-        }
     }
 
     bool Renderer::QueueFamilyIndices::isComplete() const noexcept
@@ -68,6 +54,11 @@ namespace Raythm::Render
             pickPhysicalDevice();
             createLogicalDevice();
             createSwapchain();
+            if (!m_renderingPaused)
+            {
+                createRenderPass();
+                createFramebuffers();
+            }
             createCommandPool();
             createCommandBuffers();
             createSyncObjects();
@@ -89,6 +80,12 @@ namespace Raythm::Render
     {
         waitIdle();
         cleanupSwapchain();
+
+        if (m_renderPass != VK_NULL_HANDLE)
+        {
+            vkDestroyRenderPass(m_device, m_renderPass, nullptr);
+            m_renderPass = VK_NULL_HANDLE;
+        }
 
         for (VkFence& fence : m_inFlightFences)
         {
@@ -159,16 +156,19 @@ namespace Raythm::Render
           m_graphicsQueue(std::exchange(other.m_graphicsQueue, VK_NULL_HANDLE)),
           m_presentQueue(std::exchange(other.m_presentQueue, VK_NULL_HANDLE)),
           m_swapchain(std::exchange(other.m_swapchain, VK_NULL_HANDLE)),
+          m_renderPass(std::exchange(other.m_renderPass, VK_NULL_HANDLE)),
           m_swapchainImageFormat(std::exchange(other.m_swapchainImageFormat, VK_FORMAT_UNDEFINED)),
           m_swapchainExtent(std::exchange(other.m_swapchainExtent, VkExtent2D{})),
           m_swapchainImages(std::move(other.m_swapchainImages)),
           m_swapchainImageViews(std::move(other.m_swapchainImageViews)),
+          m_swapchainFramebuffers(std::move(other.m_swapchainFramebuffers)),
           m_commandPool(std::exchange(other.m_commandPool, VK_NULL_HANDLE)),
           m_commandBuffers(std::move(other.m_commandBuffers)),
           m_imageAvailableSemaphores(std::exchange(other.m_imageAvailableSemaphores, {})),
           m_renderFinishedSemaphores(std::exchange(other.m_renderFinishedSemaphores, {})),
           m_inFlightFences(std::exchange(other.m_inFlightFences, {})),
           m_currentFrame(std::exchange(other.m_currentFrame, 0)),
+          m_pending2DCommands(std::move(other.m_pending2DCommands)),
           m_framebufferResized(std::exchange(other.m_framebufferResized, false)),
           m_renderingPaused(std::exchange(other.m_renderingPaused, false)),
           m_initialized(std::exchange(other.m_initialized, false))
@@ -194,16 +194,19 @@ namespace Raythm::Render
         std::swap(m_graphicsQueue, movedRenderer.m_graphicsQueue);
         std::swap(m_presentQueue, movedRenderer.m_presentQueue);
         std::swap(m_swapchain, movedRenderer.m_swapchain);
+        std::swap(m_renderPass, movedRenderer.m_renderPass);
         std::swap(m_swapchainImageFormat, movedRenderer.m_swapchainImageFormat);
         std::swap(m_swapchainExtent, movedRenderer.m_swapchainExtent);
         m_swapchainImages.swap(movedRenderer.m_swapchainImages);
         m_swapchainImageViews.swap(movedRenderer.m_swapchainImageViews);
+        m_swapchainFramebuffers.swap(movedRenderer.m_swapchainFramebuffers);
         std::swap(m_commandPool, movedRenderer.m_commandPool);
         m_commandBuffers.swap(movedRenderer.m_commandBuffers);
         std::swap(m_imageAvailableSemaphores, movedRenderer.m_imageAvailableSemaphores);
         std::swap(m_renderFinishedSemaphores, movedRenderer.m_renderFinishedSemaphores);
         std::swap(m_inFlightFences, movedRenderer.m_inFlightFences);
         std::swap(m_currentFrame, movedRenderer.m_currentFrame);
+        m_pending2DCommands.swap(movedRenderer.m_pending2DCommands);
         std::swap(m_framebufferResized, movedRenderer.m_framebufferResized);
         std::swap(m_renderingPaused, movedRenderer.m_renderingPaused);
         std::swap(m_initialized, movedRenderer.m_initialized);
@@ -288,9 +291,9 @@ namespace Raythm::Render
             throw makeVulkanError("Failed to reset command buffer.", result);
         }
 
-        recordClearCommandBuffer(commandBuffer, m_swapchainImages[imageIndex]);
+        recordFrameCommandBuffer(commandBuffer, imageIndex);
 
-        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         submitInfo.waitSemaphoreCount = 1;
@@ -346,6 +349,21 @@ namespace Raythm::Render
     bool Renderer::isRenderingPaused() const noexcept
     {
         return m_renderingPaused;
+    }
+
+    void Renderer::submit2DCommands(const std::vector<RenderCommand>& commands)
+    {
+        m_pending2DCommands = commands;
+    }
+
+    void Renderer::clear2DCommands() noexcept
+    {
+        m_pending2DCommands.clear();
+    }
+
+    std::size_t Renderer::getPending2DCommandCount() const noexcept
+    {
+        return m_pending2DCommands.size();
     }
 
     void Renderer::createInstance()
@@ -486,9 +504,9 @@ namespace Raythm::Render
             return;
         }
 
-        if ((swapchainSupport.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) == 0)
+        if ((swapchainSupport.capabilities.supportedUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0)
         {
-            throw std::runtime_error("Selected Vulkan surface does not support transfer-destination swapchain images.");
+            throw std::runtime_error("Selected Vulkan surface does not support color-attachment swapchain images.");
         }
 
         std::uint32_t imageCount = swapchainSupport.capabilities.minImageCount + 1;
@@ -505,7 +523,7 @@ namespace Raythm::Render
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
         const std::array<std::uint32_t, 2> queueFamilyIndices = {m_graphicsFamily, m_presentFamily};
         if (m_graphicsFamily != m_presentFamily)
@@ -574,6 +592,77 @@ namespace Raythm::Render
         m_framebufferResized = false;
     }
 
+    void Renderer::createRenderPass()
+    {
+        VkAttachmentDescription colorAttachment{};
+        colorAttachment.format = m_swapchainImageFormat;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentReference{};
+        colorAttachmentReference.attachment = 0;
+        colorAttachmentReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkSubpassDescription subpass{};
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentReference;
+
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = 1;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
+
+        VkResult result = vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_renderPass);
+        if (result != VK_SUCCESS)
+        {
+            throw makeVulkanError("Failed to create Vulkan render pass.", result);
+        }
+    }
+
+    void Renderer::createFramebuffers()
+    {
+        m_swapchainFramebuffers.reserve(m_swapchainImageViews.size());
+
+        for (VkImageView imageView : m_swapchainImageViews)
+        {
+            VkFramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = m_renderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = &imageView;
+            framebufferInfo.width = m_swapchainExtent.width;
+            framebufferInfo.height = m_swapchainExtent.height;
+            framebufferInfo.layers = 1;
+
+            VkFramebuffer framebuffer = VK_NULL_HANDLE;
+            VkResult result = vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &framebuffer);
+            if (result != VK_SUCCESS)
+            {
+                throw makeVulkanError("Failed to create Vulkan framebuffer.", result);
+            }
+
+            m_swapchainFramebuffers.push_back(framebuffer);
+        }
+    }
+
     void Renderer::createCommandPool()
     {
         VkCommandPoolCreateInfo poolInfo{};
@@ -638,6 +727,16 @@ namespace Raythm::Render
 
     void Renderer::cleanupSwapchain() noexcept
     {
+        for (VkFramebuffer framebuffer : m_swapchainFramebuffers)
+        {
+            if (framebuffer != VK_NULL_HANDLE)
+            {
+                vkDestroyFramebuffer(m_device, framebuffer, nullptr);
+            }
+        }
+
+        m_swapchainFramebuffers.clear();
+
         for (VkImageView imageView : m_swapchainImageViews)
         {
             if (imageView != VK_NULL_HANDLE)
@@ -670,11 +769,22 @@ namespace Raythm::Render
 
         waitIdle();
         cleanupSwapchain();
+        if (m_renderPass != VK_NULL_HANDLE)
+        {
+            vkDestroyRenderPass(m_device, m_renderPass, nullptr);
+            m_renderPass = VK_NULL_HANDLE;
+        }
+
         createSwapchain();
+        if (!m_renderingPaused)
+        {
+            createRenderPass();
+            createFramebuffers();
+        }
         return !m_renderingPaused;
     }
 
-    void Renderer::recordClearCommandBuffer(VkCommandBuffer commandBuffer, VkImage image) const
+    void Renderer::recordFrameCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex) const
     {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -686,68 +796,51 @@ namespace Raythm::Render
             throw makeVulkanError("Failed to begin Vulkan command buffer.", result);
         }
 
-        VkImageMemoryBarrier transferBarrier{};
-        transferBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        transferBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        transferBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        transferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        transferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        transferBarrier.image = image;
-        transferBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        transferBarrier.subresourceRange.baseMipLevel = 0;
-        transferBarrier.subresourceRange.levelCount = 1;
-        transferBarrier.subresourceRange.baseArrayLayer = 0;
-        transferBarrier.subresourceRange.layerCount = 1;
-        transferBarrier.srcAccessMask = 0;
-        transferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        VkClearValue clearValue{};
+        clearValue.color = {{
+            m_options.clearColor.red,
+            m_options.clearColor.green,
+            m_options.clearColor.blue,
+            m_options.clearColor.alpha
+        }};
 
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &transferBarrier);
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = m_renderPass;
+        renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
+        renderPassInfo.renderArea.offset = {0, 0};
+        renderPassInfo.renderArea.extent = m_swapchainExtent;
+        renderPassInfo.clearValueCount = 1;
+        renderPassInfo.pClearValues = &clearValue;
 
-        VkClearColorValue clearColor = {
-            {m_options.clearColor.red, m_options.clearColor.green, m_options.clearColor.blue, m_options.clearColor.alpha}
-        };
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkImageSubresourceRange clearRange{};
-        clearRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        clearRange.baseMipLevel = 0;
-        clearRange.levelCount = 1;
-        clearRange.baseArrayLayer = 0;
-        clearRange.layerCount = 1;
+        for (const RenderCommand& command : m_pending2DCommands)
+        {
+            const std::optional<VkRect2D> clippedRect = clipRectToExtent(command.bounds, m_swapchainExtent);
+            if (!clippedRect.has_value())
+            {
+                continue;
+            }
 
-        vkCmdClearColorImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &clearRange);
+            VkClearAttachment clearAttachment{};
+            clearAttachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            clearAttachment.colorAttachment = 0;
+            clearAttachment.clearValue.color = {{
+                command.color.red,
+                command.color.green,
+                command.color.blue,
+                command.color.alpha
+            }};
 
-        VkImageMemoryBarrier presentBarrier{};
-        presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        presentBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        presentBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        presentBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        presentBarrier.image = image;
-        presentBarrier.subresourceRange = clearRange;
-        presentBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        presentBarrier.dstAccessMask = 0;
+            VkClearRect clearRect{};
+            clearRect.rect = *clippedRect;
+            clearRect.baseArrayLayer = 0;
+            clearRect.layerCount = 1;
+            vkCmdClearAttachments(commandBuffer, 1, &clearAttachment, 1, &clearRect);
+        }
 
-        vkCmdPipelineBarrier(
-            commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            0,
-            0,
-            nullptr,
-            0,
-            nullptr,
-            1,
-            &presentBarrier);
+        vkCmdEndRenderPass(commandBuffer);
 
         result = vkEndCommandBuffer(commandBuffer);
         if (result != VK_SUCCESS)
@@ -872,65 +965,5 @@ namespace Raythm::Render
             {
                 return std::string(extension.extensionName) == REQUIRED_SWAPCHAIN_EXTENSION;
             });
-    }
-
-    VkSurfaceFormatKHR Renderer::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats)
-    {
-        if (formats.empty())
-        {
-            throw std::runtime_error("No Vulkan surface formats are available.");
-        }
-
-        auto preferredFormat = std::find_if(
-            formats.begin(),
-            formats.end(),
-            [](const VkSurfaceFormatKHR& format)
-            {
-                return format.format == VK_FORMAT_B8G8R8A8_SRGB &&
-                       format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-            });
-
-        if (preferredFormat != formats.end())
-        {
-            return *preferredFormat;
-        }
-
-        return formats.front();
-    }
-
-    VkPresentModeKHR Renderer::choosePresentMode(
-        const std::vector<VkPresentModeKHR>& presentModes,
-        bool preferVsync)
-    {
-        if (presentModes.empty())
-        {
-            throw std::runtime_error("No Vulkan present modes are available.");
-        }
-
-        if (!preferVsync && contains(presentModes, VK_PRESENT_MODE_MAILBOX_KHR))
-        {
-            return VK_PRESENT_MODE_MAILBOX_KHR;
-        }
-
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
-    VkExtent2D Renderer::chooseSwapchainExtent(
-        const VkSurfaceCapabilitiesKHR& capabilities,
-        std::pair<int, int> drawableSize) noexcept
-    {
-        if (capabilities.currentExtent.width != VARIABLE_SURFACE_EXTENT)
-        {
-            return capabilities.currentExtent;
-        }
-
-        auto [drawableWidth, drawableHeight] = drawableSize;
-        const std::uint32_t width = static_cast<std::uint32_t>(std::max(drawableWidth, 0));
-        const std::uint32_t height = static_cast<std::uint32_t>(std::max(drawableHeight, 0));
-
-        return {
-            std::clamp(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
-            std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
-        };
     }
 }
