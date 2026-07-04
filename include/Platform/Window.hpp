@@ -53,6 +53,9 @@ namespace Raythm::Platform
         /** @brief The platform requested that the window close. */
         CloseRequested,
 
+        /** @brief The platform requested that the application quit. */
+        QuitRequested,
+
         /** @brief The native window became visible. */
         Shown,
 

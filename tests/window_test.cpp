@@ -226,6 +226,51 @@ namespace
     }
 
     /**
+     * @brief Verifies that unsupported owned window events are consumed instead of replayed forever.
+     * @return True when an unsupported event does not block a later supported event.
+     */
+    bool testUnsupportedOwnedWindowEventIsConsumed()
+    {
+        Platform::Window window(makeHiddenOptions());
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = SDL_GetWindowID(window.getNativeHandle());
+
+        bool passed = true;
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_HIT_TEST, windowId), "should push unsupported hit-test event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, windowId, 77, 88), "should push moved event after hit-test");
+
+        Platform::WindowEvent event{};
+        passed &= expect(pollUntil(window, event, Platform::WindowEventType::Moved),
+                         "supported event after unsupported event should be reachable");
+        passed &= expect(event.x == 77, "moved event after unsupported event should keep x payload");
+        passed &= expect(event.y == 88, "moved event after unsupported event should keep y payload");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies that application-level quit events close the window abstraction.
+     * @return True when SDL_EVENT_QUIT translates into a sticky close request.
+     */
+    bool testQuitEventRequestsClose()
+    {
+        Platform::Window window(makeHiddenOptions());
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+
+        SDL_Event quitEvent{};
+        quitEvent.type = SDL_EVENT_QUIT;
+        bool passed = true;
+        passed &= expect(SDL_PushEvent(&quitEvent), "should push quit event");
+
+        Platform::WindowEvent event{};
+        passed &= expect(window.pollEvent(event), "quit event should be translated");
+        passed &= expect(event.type == Platform::WindowEventType::QuitRequested, "quit event type should match");
+        passed &= expect(window.shouldClose(), "quit event should set close flag");
+
+        return passed;
+    }
+
+    /**
      * @brief Verifies SDL Vulkan extension discovery through the Window wrapper.
      * @return True when extensions are valid, or when Vulkan window support is unavailable on the host.
      * @note Missing Vulkan window support is treated as a skip so headless or minimal CI hosts can still run tests.
@@ -283,6 +328,8 @@ int main(int argc, char* argv[])
         allTestsPassed &= testWindowEventTranslation();
         allTestsPassed &= testEventFiltering();
         allTestsPassed &= testForeignWindowEventPreserved();
+        allTestsPassed &= testUnsupportedOwnedWindowEventIsConsumed();
+        allTestsPassed &= testQuitEventRequestsClose();
         allTestsPassed &= testVulkanExtensionQuery();
     }
     catch (const std::exception& exception)

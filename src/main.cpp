@@ -1,22 +1,82 @@
 // RaythmDemo - Main Entry Point
-// Provides the current executable entry stub while subsystems are brought online.
+// Starts a minimal SDL/Vulkan loop that clears and presents the platform window.
 // Author: RatherHard
 // Date: 2026-07-04
 
+#include "Platform/Window.hpp"
+#include "Render/Renderer.hpp"
+
+#include <exception>
 #include <iostream>
+
+#include <SDL3/SDL.h>
+
+namespace
+{
+    /** @brief Exit code returned when startup or rendering fails. */
+    constexpr int FAILURE_EXIT_CODE = 1;
+
+    /**
+     * @brief Builds default window options for the current render skeleton.
+     * @return Vulkan-capable window configuration for the main executable.
+     * @note The renderer currently clears this window continuously until the platform requests close.
+     */
+    Raythm::Platform::WindowOptions makeWindowOptions()
+    {
+        Raythm::Platform::WindowOptions options{};
+        options.title = "RaythmDemo";
+        options.width = 1280;
+        options.height = 720;
+        options.startHidden = true;
+        options.resizable = true;
+        options.vulkanSurface = true;
+        return options;
+    }
+}
 
 /**
  * @brief Starts the RaythmDemo application executable.
  * @param argc Number of command-line arguments supplied by the platform runtime.
  * @param argv Command-line argument values supplied by the platform runtime.
- * @return Process exit code; zero indicates the entry stub ran successfully.
- * @note Startup is currently limited to a smoke message until the game loop is implemented.
+ * @return Process exit code; zero indicates clean shutdown.
+ * @note This is the first render milestone: clear a Vulkan swapchain and present it through SDL.
  */
 int main(int argc, char* argv[])
 {
     (void)argc;
     (void)argv;
 
-    std::cout << "RaythmDemo application entry point" << std::endl;
-    return 0;
+    if (!SDL_Init(SDL_INIT_VIDEO))
+    {
+        std::cerr << "SDL video subsystem is unavailable: " << SDL_GetError() << std::endl;
+        return FAILURE_EXIT_CODE;
+    }
+
+    try
+    {
+        Raythm::Platform::Window window(makeWindowOptions());
+        Raythm::Render::Renderer renderer(window);
+        window.show();
+
+        while (!window.shouldClose())
+        {
+            Raythm::Platform::WindowEvent event{};
+            while (window.pollEvent(event))
+            {
+                renderer.handleWindowEvent(event);
+            }
+
+            renderer.renderFrame();
+        }
+
+        renderer.waitIdle();
+        SDL_Quit();
+        return 0;
+    }
+    catch (const std::exception& exception)
+    {
+        std::cerr << "RaythmDemo failed: " << exception.what() << std::endl;
+        SDL_Quit();
+        return FAILURE_EXIT_CODE;
+    }
 }

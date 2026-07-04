@@ -113,22 +113,33 @@ namespace Raythm::Platform
     bool Window::pollEvent(WindowEvent& event)
     {
         SDL_Event sdlEvent{};
-        std::vector<SDL_Event> deferredEvents;
-
-        while (SDL_PeepEvents(&sdlEvent, 1, SDL_GETEVENT, SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST) == 1)
+        while (SDL_PeepEvents(&sdlEvent, 1, SDL_PEEKEVENT, SDL_EVENT_FIRST, SDL_EVENT_LAST) == 1)
         {
+            if (sdlEvent.type == SDL_EVENT_QUIT)
+            {
+                SDL_PeepEvents(&sdlEvent, 1, SDL_GETEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT);
+                event = {};
+                event.type = WindowEventType::QuitRequested;
+                m_shouldClose = true;
+                return true;
+            }
+
+            if (sdlEvent.type < SDL_EVENT_WINDOW_FIRST || sdlEvent.type > SDL_EVENT_WINDOW_LAST)
+            {
+                return false;
+            }
+
+            if (sdlEvent.window.windowID != m_windowId)
+            {
+                return false;
+            }
+
+            SDL_PeepEvents(&sdlEvent, 1, SDL_GETEVENT, SDL_EVENT_WINDOW_FIRST, SDL_EVENT_WINDOW_LAST);
+
             WindowEvent translatedEvent{};
             if (!translateEvent(sdlEvent, translatedEvent, m_windowId))
             {
-                deferredEvents.push_back(sdlEvent);
                 continue;
-            }
-
-            // SDL owns one global event queue. Events for other windows are replayed before returning so
-            // this wrapper consumes only events belonging to its native window and preserves other systems' work.
-            for (SDL_Event& deferredEvent : deferredEvents)
-            {
-                SDL_PushEvent(&deferredEvent);
             }
 
             if (translatedEvent.type == WindowEventType::CloseRequested)
@@ -138,11 +149,6 @@ namespace Raythm::Platform
 
             event = translatedEvent;
             return true;
-        }
-
-        for (SDL_Event& deferredEvent : deferredEvents)
-        {
-            SDL_PushEvent(&deferredEvent);
         }
 
         return false;
@@ -302,6 +308,13 @@ namespace Raythm::Platform
 
     bool Window::translateEvent(const SDL_Event& sdlEvent, WindowEvent& event, SDL_WindowID windowId) noexcept
     {
+        if (sdlEvent.type == SDL_EVENT_QUIT)
+        {
+            event = {};
+            event.type = WindowEventType::QuitRequested;
+            return true;
+        }
+
         if (sdlEvent.type < SDL_EVENT_WINDOW_FIRST || sdlEvent.type > SDL_EVENT_WINDOW_LAST)
         {
             return false;
@@ -362,6 +375,9 @@ namespace Raythm::Platform
             break;
         case SDL_EVENT_WINDOW_FOCUS_LOST:
             event.type = WindowEventType::FocusLost;
+            break;
+        case SDL_EVENT_WINDOW_HDR_STATE_CHANGED:
+            event.type = WindowEventType::Exposed;
             break;
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
             event.type = WindowEventType::DisplayChanged;

@@ -35,8 +35,25 @@ target_link_libraries(RaythmDemoPlatform PUBLIC
     SDL3::SDL3
 )
 
+add_library(RaythmDemoRender
+    src/Render/Renderer.cpp
+)
+
+target_include_directories(RaythmDemoRender PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(RaythmDemoRender PUBLIC
+    RaythmDemoPlatform
+    volk::volk
+)
+
 add_executable(RaythmDemo
     src/main.cpp
+)
+
+target_link_libraries(RaythmDemo PRIVATE
+    RaythmDemoRender
 )
 
 add_executable(RaythmDemoEnvironmentTest
@@ -46,6 +63,10 @@ add_executable(RaythmDemoEnvironmentTest
 
 add_executable(RaythmDemoWindowTest
     tests/window_test.cpp
+)
+
+add_executable(RaythmDemoRenderTest
+    tests/render_test.cpp
 )
 
 target_include_directories(RaythmDemoEnvironmentTest PRIVATE
@@ -63,13 +84,22 @@ target_link_libraries(RaythmDemoWindowTest PRIVATE
     RaythmDemoPlatform
 )
 
+target_link_libraries(RaythmDemoRenderTest PRIVATE
+    RaythmDemoRender
+)
+
 add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
+add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 
 # Platform-specific settings
 if(WIN32)
     # Windows-specific settings
     target_compile_definitions(RaythmDemoPlatform PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoRender PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
@@ -85,12 +115,18 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoRenderTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
 
     if(MSVC)
         target_compile_options(RaythmDemoPlatform PUBLIC /utf-8)
+        target_compile_options(RaythmDemoRender PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
         target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)
     # Linux-specific settings
@@ -99,6 +135,10 @@ elseif(UNIX AND NOT APPLE)
         pthread
     )
     target_link_libraries(RaythmDemoEnvironmentTest PRIVATE
+        ${CMAKE_DL_LIBS}
+        pthread
+    )
+    target_link_libraries(RaythmDemoRenderTest PRIVATE
         ${CMAKE_DL_LIBS}
         pthread
     )
