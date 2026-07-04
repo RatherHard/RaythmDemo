@@ -50,6 +50,19 @@ target_link_libraries(RaythmDemoRender PUBLIC
     volk::volk
 )
 
+add_library(RaythmDemoAudio
+    src/Audio/AudioEngine.cpp
+    src/miniaudio_impl.cpp
+)
+
+target_include_directories(RaythmDemoAudio PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_include_directories(RaythmDemoAudio PRIVATE
+    ${CMAKE_SOURCE_DIR}/third_party/miniaudio
+)
+
 add_library(RaythmDemoCore
     src/Core/Application.cpp
     src/Core/Time.cpp
@@ -84,6 +97,10 @@ add_executable(RaythmDemoInputStateTest
     tests/input_state_test.cpp
 )
 
+add_executable(RaythmDemoAudioTest
+    tests/audio_test.cpp
+)
+
 add_executable(RaythmDemoCoreTest
     tests/core_test.cpp
 )
@@ -111,6 +128,10 @@ target_link_libraries(RaythmDemoInputStateTest PRIVATE
     RaythmDemoPlatform
 )
 
+target_link_libraries(RaythmDemoAudioTest PRIVATE
+    RaythmDemoAudio
+)
+
 target_link_libraries(RaythmDemoCoreTest PRIVATE
     RaythmDemoCore
 )
@@ -122,6 +143,7 @@ target_link_libraries(RaythmDemoRenderTest PRIVATE
 add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
 add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
+add_test(NAME RaythmDemoAudioTest COMMAND RaythmDemoAudioTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 
@@ -133,6 +155,10 @@ if(WIN32)
         NOMINMAX
     )
     target_compile_definitions(RaythmDemoRender PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoAudio PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
@@ -156,6 +182,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoAudioTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoCoreTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -168,17 +198,23 @@ if(WIN32)
     if(MSVC)
         target_compile_options(RaythmDemoPlatform PUBLIC /utf-8)
         target_compile_options(RaythmDemoRender PUBLIC /utf-8)
+        target_compile_options(RaythmDemoAudio PUBLIC /utf-8)
         target_compile_options(RaythmDemoCore PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
         target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoInputStateTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoAudioTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
     endif()
 elseif(UNIX AND NOT APPLE)
     # Linux-specific settings
     target_link_libraries(RaythmDemoPlatform PUBLIC
+        ${CMAKE_DL_LIBS}
+        pthread
+    )
+    target_link_libraries(RaythmDemoAudio PUBLIC
         ${CMAKE_DL_LIBS}
         pthread
     )
