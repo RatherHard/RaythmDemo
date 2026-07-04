@@ -62,11 +62,14 @@ int main(int argc, char* argv[])
 
         while (!window.shouldClose())
         {
-            Raythm::Platform::WindowEvent event{};
-            while (eventPump.pollWindowEvent(event, window.getWindowId()))
+            Raythm::Platform::PlatformEvent event{};
+            while (eventPump.pollEvent(event, window.getWindowId()))
             {
-                window.applyEvent(event);
-                renderer.handleWindowEvent(event);
+                if (event.type == Raythm::Platform::PlatformEventType::Window)
+                {
+                    window.applyEvent(event.window);
+                    renderer.handleWindowEvent(event.window);
+                }
             }
 
             renderer.renderFrame();

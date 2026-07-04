@@ -66,6 +66,32 @@ namespace
     }
 
     /**
+     * @brief Polls translated input events until the expected event type appears.
+     * @param eventPump SDL event pump being checked.
+     * @param windowId SDL window identifier that should own translated events.
+     * @param event Receives the matching event payload when one is found.
+     * @param expectedType Input event type that should appear in the wrapper event stream.
+     * @return True when the expected event type is observed before the queue is exhausted.
+     */
+    bool pollUntil(
+        Platform::EventPump& eventPump,
+        SDL_WindowID windowId,
+        Platform::InputEvent& event,
+        Platform::InputEventType expectedType
+    )
+    {
+        while (eventPump.pollInputEvent(event, windowId))
+        {
+            if (event.type == expectedType)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @brief Pushes a synthetic SDL window event into the global SDL event queue.
      * @param type SDL window event type to simulate.
      * @param windowId SDL window identifier that should own the simulated event.
@@ -80,6 +106,94 @@ namespace
         event.window.windowID = windowId;
         event.window.data1 = data1;
         event.window.data2 = data2;
+
+        return SDL_PushEvent(&event);
+    }
+
+    /**
+     * @brief Pushes a synthetic SDL keyboard event into the global SDL event queue.
+     * @param type SDL keyboard event type to simulate.
+     * @param windowId SDL window identifier that should own the simulated event.
+     * @param scancode Physical key code to preserve in the translated payload.
+     * @param key Virtual key code to preserve in the translated payload.
+     * @param isRepeat True when simulating a repeat key press.
+     * @return True when SDL accepts the event into its queue.
+     */
+    bool pushKeyboardEvent(
+        SDL_EventType type,
+        SDL_WindowID windowId,
+        SDL_Scancode scancode,
+        SDL_Keycode key,
+        bool isRepeat = false
+    )
+    {
+        SDL_Event event{};
+        event.key.type = type;
+        event.key.windowID = windowId;
+        event.key.scancode = scancode;
+        event.key.key = key;
+        event.key.repeat = isRepeat;
+
+        return SDL_PushEvent(&event);
+    }
+
+    /**
+     * @brief Pushes a synthetic SDL mouse button event into the global SDL event queue.
+     * @param type SDL mouse button event type to simulate.
+     * @param windowId SDL window identifier that should own the simulated event.
+     * @param button Mouse button index to preserve in the translated payload.
+     * @param clicks Click count to preserve in the translated payload.
+     * @param x Cursor x coordinate relative to the window.
+     * @param y Cursor y coordinate relative to the window.
+     * @return True when SDL accepts the event into its queue.
+     */
+    bool pushMouseButtonEvent(
+        SDL_EventType type,
+        SDL_WindowID windowId,
+        Uint8 button,
+        Uint8 clicks,
+        float x,
+        float y
+    )
+    {
+        SDL_Event event{};
+        event.button.type = type;
+        event.button.windowID = windowId;
+        event.button.button = button;
+        event.button.clicks = clicks;
+        event.button.x = x;
+        event.button.y = y;
+
+        return SDL_PushEvent(&event);
+    }
+
+    /**
+     * @brief Pushes a synthetic SDL mouse motion event into the global SDL event queue.
+     * @param windowId SDL window identifier that should own the simulated event.
+     * @param state Mouse button bitmask active during the motion event.
+     * @param x Cursor x coordinate relative to the window.
+     * @param y Cursor y coordinate relative to the window.
+     * @param xRelative Relative x movement since the previous motion event.
+     * @param yRelative Relative y movement since the previous motion event.
+     * @return True when SDL accepts the event into its queue.
+     */
+    bool pushMouseMotionEvent(
+        SDL_WindowID windowId,
+        SDL_MouseButtonFlags state,
+        float x,
+        float y,
+        float xRelative,
+        float yRelative
+    )
+    {
+        SDL_Event event{};
+        event.motion.type = SDL_EVENT_MOUSE_MOTION;
+        event.motion.windowID = windowId;
+        event.motion.state = state;
+        event.motion.x = x;
+        event.motion.y = y;
+        event.motion.xrel = xRelative;
+        event.motion.yrel = yRelative;
 
         return SDL_PushEvent(&event);
     }
@@ -289,6 +403,240 @@ namespace
     }
 
     /**
+     * @brief Verifies keyboard events become engine-facing input events with key identity preserved.
+     * @return True when key down and up events translate with expected payloads.
+     */
+    bool testEventPumpKeyboardEventTranslation()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_DOWN, windowId, SDL_SCANCODE_SPACE, SDLK_SPACE, true),
+                         "should push key down event");
+
+        Platform::InputEvent event{};
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::KeyPressed),
+                         "key down event should be translated");
+        passed &= expect(event.type == Platform::InputEventType::KeyPressed, "key down type should match");
+        passed &= expect(event.windowId == windowId, "keyboard window id should match");
+        passed &= expect(event.scancode == SDL_SCANCODE_SPACE, "keyboard scancode should match");
+        passed &= expect(event.key == SDLK_SPACE, "keyboard keycode should match");
+        passed &= expect(event.isRepeat, "keyboard repeat flag should match");
+
+        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_UP, windowId, SDL_SCANCODE_SPACE, SDLK_SPACE),
+                         "should push key up event");
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::KeyReleased),
+                         "key up event should be translated");
+        passed &= expect(event.type == Platform::InputEventType::KeyReleased, "key up type should match");
+        passed &= expect(!event.isRepeat, "key up repeat flag should remain false");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies mouse button events become engine-facing input events with click payloads preserved.
+     * @return True when mouse button down and up events translate with expected payloads.
+     */
+    bool testEventPumpMouseButtonEventTranslation()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN, windowId, SDL_BUTTON_LEFT, 2, 13.5F, 24.25F),
+                         "should push mouse button down event");
+
+        Platform::InputEvent event{};
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::MouseButtonPressed),
+                         "mouse button down event should be translated");
+        passed &= expect(event.type == Platform::InputEventType::MouseButtonPressed, "button down type should match");
+        passed &= expect(event.windowId == windowId, "mouse button window id should match");
+        passed &= expect(event.mouseButton == SDL_BUTTON_LEFT, "mouse button index should match");
+        passed &= expect(event.clicks == 2, "mouse button click count should match");
+        passed &= expect(event.x == 13.5F, "mouse button x should match");
+        passed &= expect(event.y == 24.25F, "mouse button y should match");
+
+        passed &= expect(pushMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP, windowId, SDL_BUTTON_LEFT, 1, 15.0F, 26.0F),
+                         "should push mouse button up event");
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::MouseButtonReleased),
+                         "mouse button up event should be translated");
+        passed &= expect(event.type == Platform::InputEventType::MouseButtonReleased, "button up type should match");
+        passed &= expect(event.clicks == 1, "mouse button up click count should match");
+        passed &= expect(event.x == 15.0F, "mouse button up x should match");
+        passed &= expect(event.y == 26.0F, "mouse button up y should match");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies mouse motion events preserve absolute position, relative delta, and button state.
+     * @return True when a synthetic mouse motion event translates with the expected payload.
+     */
+    bool testEventPumpMouseMotionTranslation()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+        const SDL_MouseButtonFlags buttonState = SDL_BUTTON_LMASK | SDL_BUTTON_RMASK;
+
+        bool passed = true;
+        passed &= expect(pushMouseMotionEvent(windowId, buttonState, 30.0F, 40.0F, -2.0F, 3.5F),
+                         "should push mouse motion event");
+
+        Platform::InputEvent event{};
+        passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::MouseMoved),
+                         "mouse motion event should be translated");
+        passed &= expect(event.type == Platform::InputEventType::MouseMoved, "mouse motion type should match");
+        passed &= expect(event.windowId == windowId, "mouse motion window id should match");
+        passed &= expect(event.mouseButtonState == buttonState, "mouse motion button state should match");
+        passed &= expect(event.x == 30.0F, "mouse motion x should match");
+        passed &= expect(event.y == 40.0F, "mouse motion y should match");
+        passed &= expect(event.xRelative == -2.0F, "mouse motion relative x should match");
+        passed &= expect(event.yRelative == 3.5F, "mouse motion relative y should match");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies input polling preserves queued window events for later window polling.
+     * @return True when a close request remains observable after an input-only poll.
+     */
+    bool testInputPollingPreservesWindowEvents()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED, windowId), "should push close event");
+        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_DOWN, windowId, SDL_SCANCODE_A, SDLK_A),
+                         "should push key event after close");
+
+        Platform::InputEvent inputEvent{};
+        passed &= expect(eventPump.pollInputEvent(inputEvent, windowId), "input polling should find key event");
+        passed &= expect(inputEvent.type == Platform::InputEventType::KeyPressed, "input polling key type should match");
+
+        Platform::WindowEvent windowEvent{};
+        passed &= expect(eventPump.pollWindowEvent(windowEvent, windowId), "window event should survive input polling");
+        passed &= expect(windowEvent.type == Platform::WindowEventType::CloseRequested,
+                         "preserved close event type should match");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies window polling preserves queued input events for later input polling.
+     * @return True when a key event remains observable after a window-only poll.
+     */
+    bool testWindowPollingPreservesInputEvents()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_DOWN, windowId, SDL_SCANCODE_A, SDLK_A),
+                         "should push key event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_CLOSE_REQUESTED, windowId), "should push close after key");
+
+        Platform::WindowEvent windowEvent{};
+        passed &= expect(eventPump.pollWindowEvent(windowEvent, windowId), "window polling should find close event");
+        passed &= expect(windowEvent.type == Platform::WindowEventType::CloseRequested,
+                         "window polling close type should match");
+
+        Platform::InputEvent inputEvent{};
+        passed &= expect(eventPump.pollInputEvent(inputEvent, windowId), "input event should survive window polling");
+        passed &= expect(inputEvent.type == Platform::InputEventType::KeyPressed, "preserved key event type should match");
+        passed &= expect(inputEvent.scancode == SDL_SCANCODE_A, "preserved key scancode should match");
+        passed &= expect(inputEvent.key == SDLK_A, "preserved keycode should match");
+
+        return passed;
+    }
+
+    /**
+     * @brief Verifies polling one SDL window preserves events owned by another SDL window.
+     * @return True when foreign and owned window events are both delivered to their requested windows.
+     */
+    bool testEventPumpPreservesForeignWindowEvents()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+
+        SDL_Window* foreignWindow = SDL_CreateWindow("RaythmDemo Preserved Foreign Test", 160, 120, SDL_WINDOW_HIDDEN);
+        if (foreignWindow == nullptr)
+        {
+            std::cerr << "FAILED: should create foreign SDL window: " << SDL_GetError() << std::endl;
+            return false;
+        }
+
+        const SDL_WindowID ownedWindowId = window.getWindowId();
+        const SDL_WindowID foreignWindowId = SDL_GetWindowID(foreignWindow);
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+
+        bool passed = true;
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_MOVED, foreignWindowId, 44, 55),
+                         "should push foreign window event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_RESIZED, ownedWindowId, 640, 480),
+                         "should push owned window event");
+
+        Platform::PlatformEvent event{};
+        passed &= expect(eventPump.pollEvent(event, ownedWindowId), "owned window should receive its event");
+        passed &= expect(event.type == Platform::PlatformEventType::Window, "owned platform event type should match");
+        passed &= expect(event.window.type == Platform::WindowEventType::Resized, "owned resize type should match");
+
+        passed &= expect(eventPump.pollEvent(event, foreignWindowId), "foreign window event should be preserved");
+        passed &= expect(event.type == Platform::PlatformEventType::Window, "foreign platform event type should match");
+        passed &= expect(event.window.type == Platform::WindowEventType::Moved, "foreign moved type should match");
+        passed &= expect(event.window.x == 44, "foreign moved x should match");
+        passed &= expect(event.window.y == 55, "foreign moved y should match");
+
+        SDL_DestroyWindow(foreignWindow);
+        return passed;
+    }
+
+    /**
+     * @brief Verifies the unified platform event stream preserves window and input event order.
+     * @return True when window and input payloads are delivered through one polling entrypoint.
+     */
+    bool testEventPumpUnifiedPlatformEventTranslation()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_RESIZED, windowId, 800, 600),
+                         "should push resize event");
+        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_DOWN, windowId, SDL_SCANCODE_A, SDLK_A),
+                         "should push key event after resize");
+
+        Platform::PlatformEvent event{};
+        passed &= expect(eventPump.pollEvent(event, windowId), "unified stream should translate first event");
+        passed &= expect(event.type == Platform::PlatformEventType::Window, "first unified event should be window event");
+        passed &= expect(event.window.type == Platform::WindowEventType::Resized, "first window event type should match");
+        passed &= expect(event.window.width == 800, "unified resize width should match");
+        passed &= expect(event.window.height == 600, "unified resize height should match");
+
+        passed &= expect(eventPump.pollEvent(event, windowId), "unified stream should translate second event");
+        passed &= expect(event.type == Platform::PlatformEventType::Input, "second unified event should be input event");
+        passed &= expect(event.input.type == Platform::InputEventType::KeyPressed, "second input event type should match");
+        passed &= expect(event.input.scancode == SDL_SCANCODE_A, "unified key scancode should match");
+        passed &= expect(event.input.key == SDLK_A, "unified keycode should match");
+
+        return passed;
+    }
+
+    /**
      * @brief Verifies SDL Vulkan extension discovery through the Window wrapper.
      * @return True when extensions are valid, or when Vulkan window support is unavailable on the host.
      * @note Missing Vulkan window support is treated as a skip so headless or minimal CI hosts can still run tests.
@@ -349,6 +697,13 @@ int main(int argc, char* argv[])
         allTestsPassed &= testEventPumpConsumesUnsupportedOwnedWindowEvent();
         allTestsPassed &= testQuitEventRequestsClose();
         allTestsPassed &= testCloseRequestedEventRequestsClose();
+        allTestsPassed &= testEventPumpKeyboardEventTranslation();
+        allTestsPassed &= testEventPumpMouseButtonEventTranslation();
+        allTestsPassed &= testEventPumpMouseMotionTranslation();
+        allTestsPassed &= testInputPollingPreservesWindowEvents();
+        allTestsPassed &= testWindowPollingPreservesInputEvents();
+        allTestsPassed &= testEventPumpPreservesForeignWindowEvents();
+        allTestsPassed &= testEventPumpUnifiedPlatformEventTranslation();
         allTestsPassed &= testVulkanExtensionQuery();
     }
     catch (const std::exception& exception)
