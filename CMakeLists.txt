@@ -76,6 +76,25 @@ target_include_directories(RaythmDemoAudio PRIVATE
     ${CMAKE_SOURCE_DIR}/third_party/miniaudio
 )
 
+add_library(RaythmDemoGame
+    src/Game/ChartLoader.cpp
+    src/Game/GameplayView.cpp
+    src/Game/LaneInput.cpp
+)
+
+target_include_directories(RaythmDemoGame PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(RaythmDemoGame PUBLIC
+    RaythmDemoPlatform
+    RaythmDemoRenderStrategy
+)
+
+target_link_libraries(RaythmDemoGame PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
 add_library(RaythmDemoCore
     src/Core/Application.cpp
     src/Core/Time.cpp
@@ -114,6 +133,10 @@ add_executable(RaythmDemoAudioTest
     tests/audio_test.cpp
 )
 
+add_executable(RaythmDemoGameTest
+    tests/game_test.cpp
+)
+
 add_executable(RaythmDemoCoreTest
     tests/core_test.cpp
 )
@@ -149,6 +172,10 @@ target_link_libraries(RaythmDemoAudioTest PRIVATE
     RaythmDemoAudio
 )
 
+target_link_libraries(RaythmDemoGameTest PRIVATE
+    RaythmDemoGame
+)
+
 target_link_libraries(RaythmDemoCoreTest PRIVATE
     RaythmDemoCore
 )
@@ -165,6 +192,7 @@ add_test(NAME RaythmDemoEnvironmentTest COMMAND RaythmDemoEnvironmentTest)
 add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
 add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
 add_test(NAME RaythmDemoAudioTest COMMAND RaythmDemoAudioTest)
+add_test(NAME RaythmDemoGameTest COMMAND RaythmDemoGameTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 add_test(NAME RaythmDemoRenderStrategyTest COMMAND RaythmDemoRenderStrategyTest)
@@ -185,6 +213,10 @@ if(WIN32)
         NOMINMAX
     )
     target_compile_definitions(RaythmDemoAudio PUBLIC
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    target_compile_definitions(RaythmDemoGame PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
@@ -212,6 +244,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoGameTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoCoreTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -230,12 +266,14 @@ if(WIN32)
         target_compile_options(RaythmDemoRender PUBLIC /utf-8)
         target_compile_options(RaythmDemoRenderStrategy PUBLIC /utf-8)
         target_compile_options(RaythmDemoAudio PUBLIC /utf-8)
+        target_compile_options(RaythmDemoGame PUBLIC /utf-8)
         target_compile_options(RaythmDemoCore PUBLIC /utf-8)
         target_compile_options(RaythmDemo PRIVATE /utf-8)
         target_compile_options(RaythmDemoEnvironmentTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoWindowTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoInputStateTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoAudioTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoGameTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderStrategyTest PRIVATE /utf-8)
