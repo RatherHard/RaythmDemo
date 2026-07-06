@@ -79,6 +79,7 @@ target_include_directories(RaythmDemoAudio PRIVATE
 
 add_library(RaythmDemoGame
     src/Game/ChartLoader.cpp
+    src/Game/GameplaySession.cpp
     src/Game/GameplayView.cpp
     src/Game/LaneInput.cpp
 )
@@ -138,6 +139,10 @@ add_executable(RaythmDemoGameTest
     tests/game_test.cpp
 )
 
+add_executable(RaythmDemoGameplaySessionTest
+    tests/gameplay_session_test.cpp
+)
+
 add_executable(RaythmDemoCoreTest
     tests/core_test.cpp
 )
@@ -177,6 +182,10 @@ target_link_libraries(RaythmDemoGameTest PRIVATE
     RaythmDemoGame
 )
 
+target_link_libraries(RaythmDemoGameplaySessionTest PRIVATE
+    RaythmDemoGame
+)
+
 target_link_libraries(RaythmDemoCoreTest PRIVATE
     RaythmDemoCore
 )
@@ -194,6 +203,7 @@ add_test(NAME RaythmDemoWindowTest COMMAND RaythmDemoWindowTest)
 add_test(NAME RaythmDemoInputStateTest COMMAND RaythmDemoInputStateTest)
 add_test(NAME RaythmDemoAudioTest COMMAND RaythmDemoAudioTest)
 add_test(NAME RaythmDemoGameTest COMMAND RaythmDemoGameTest)
+add_test(NAME RaythmDemoGameplaySessionTest COMMAND RaythmDemoGameplaySessionTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 add_test(NAME RaythmDemoRenderStrategyTest COMMAND RaythmDemoRenderStrategyTest)
@@ -257,6 +267,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoGameplaySessionTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoCoreTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -283,6 +297,7 @@ if(WIN32)
         target_compile_options(RaythmDemoInputStateTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoAudioTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoGameTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoGameplaySessionTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderStrategyTest PRIVATE /utf-8)
