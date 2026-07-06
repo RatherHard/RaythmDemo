@@ -20,6 +20,7 @@ enable_testing()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(volk CONFIG REQUIRED)
+find_package(Python3 COMPONENTS Interpreter)
 
 # Add executable
 add_library(RaythmDemoPlatform
@@ -196,6 +197,14 @@ add_test(NAME RaythmDemoGameTest COMMAND RaythmDemoGameTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 add_test(NAME RaythmDemoRenderStrategyTest COMMAND RaythmDemoRenderStrategyTest)
+if(Python3_FOUND)
+    add_test(
+        NAME RaythmDemoMcConverterPyTest
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_mc_to_chart_json.py
+    )
+else()
+    message(STATUS "Python3 interpreter not found; RaythmDemoMcConverterPyTest will not be registered")
+endif()
 
 # Platform-specific settings
 if(WIN32)

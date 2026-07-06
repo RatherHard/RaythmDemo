@@ -719,6 +719,11 @@ namespace Raythm::Game
 
     Chart ChartLoader::loadFromJsonText(std::string_view jsonText) const
     {
+        if (jsonText.size() > m_options.maxFileSizeBytes)
+        {
+            throw chartError("JSON text exceeds configured size limit");
+        }
+
         Json root;
         try
         {

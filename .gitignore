@@ -113,6 +113,11 @@ Doxyfile.bak
 Testing/
 CTestCostData.txt
 
+# Python cache
+__pycache__/
+tools/__pycache__/
+*.py[cod]
+
 # Code coverage
 *.gcda
 *.gcno

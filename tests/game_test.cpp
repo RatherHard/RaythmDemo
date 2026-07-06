@@ -10,6 +10,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <chrono>
 #include <cmath>
 #include <exception>
 #include <filesystem>
@@ -170,6 +171,40 @@ namespace
     }
 
     /**
+     * @brief Verifies converted .mc chart output remains compatible with the runtime loader contract.
+     * @return True when converter-style metadata, timing, tap, and hold notes parse correctly.
+     */
+    bool testChartLoaderParsesConvertedMcChartShape()
+    {
+        const std::string json = R"json({
+            "meta": {
+                "title": "Converted Song",
+                "artist": "Converted Artist",
+                "creator": "Converted Charter",
+                "path": "charts/00001/1627802685.ogg",
+                "offset": 289
+            },
+            "time": [
+                { "beat": [0, 0, 1], "bpm": 190.00255573050448 }
+            ],
+            "note": [
+                { "beat": [9, 0, 3], "column": 0 },
+                { "beat": [9, 0, 3], "endbeat": [10, 0, 3], "column": 3 }
+            ]
+        })json";
+        const Game::Chart chart = Game::ChartLoader{}.loadFromJsonText(json);
+
+        bool passed = true;
+        passed &= expect(chart.meta.audioPath == "charts/00001/1627802685.ogg", "converted audio path should be accepted");
+        passed &= expect(chart.meta.offsetMilliseconds == 289, "converted offset should be accepted");
+        passed &= expect(chart.timingPoints.size() == 1U, "converted chart should keep one BPM entry");
+        passed &= expect(chart.notes.size() == 2U, "converted chart should keep playable notes only");
+        passed &= expect(!chart.notes[0].isHold(), "converted tap note should remain tap");
+        passed &= expect(chart.notes[1].isHold(), "converted hold note should preserve endbeat");
+        return passed;
+    }
+
+    /**
      * @brief Verifies equivalent beat tuple forms canonicalize to the same position.
      * @return True when equivalent beat forms compare equal and duplicates are detected.
      */
@@ -283,10 +318,27 @@ namespace
      */
     bool testChartLoaderIgnoresUnknownFieldsAndLoadsFile()
     {
-        const std::filesystem::path path = std::filesystem::current_path() / "raythm_game_chart_loader_test.json";
+        const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
+        const std::filesystem::path directory = std::filesystem::temp_directory_path()
+            / ("raythm_game_chart_loader_test_" + std::to_string(suffix));
+        const std::filesystem::path path = directory / "root" / "chart.json";
+        const std::filesystem::path outsidePath = directory / "outside.json";
+
+        struct TempDirectoryCleanup
+        {
+            std::filesystem::path directory;
+
+            ~TempDirectoryCleanup()
+            {
+                std::error_code error;
+                std::filesystem::remove_all(directory, error);
+            }
+        } cleanup{directory};
+
+        std::filesystem::create_directories(path.parent_path());
         bool passed = true;
         {
-            std::ofstream file(path);
+            std::ofstream file(path, std::ios::out | std::ios::trunc);
             file << R"json({
                 "meta": { "title": "File", "artist": "A", "creator": "C", "path": "a.ogg", "offset": 0, "extra": true },
                 "time": [{ "beat": [0, 0, 1], "bpm": 120, "extra": true }],
@@ -295,7 +347,9 @@ namespace
             })json";
         }
 
-        const Game::Chart chart = Game::ChartLoader{}.loadFromFile(path.string());
+        Game::ChartLoadOptions loadOptions{};
+        loadOptions.assetRoot = path.parent_path();
+        const Game::Chart chart = Game::ChartLoader{loadOptions}.loadFromFile(path.filename().string());
         passed &= expect(chart.meta.title == "File", "loadFromFile should parse chart metadata");
         passed &= expect(chart.notes.size() == 1U, "unknown fields should not prevent note parsing");
         passed &= expectRuntimeError(
@@ -308,6 +362,18 @@ namespace
             },
             "file larger than configured limit should throw");
         passed &= expectRuntimeError(
+            []()
+            {
+                Game::ChartLoadOptions options{};
+                options.maxFileSizeBytes = 8;
+                (void)Game::ChartLoader{options}.loadFromJsonText(makeMinimalChartJson());
+            },
+            "JSON text larger than configured limit should throw");
+        {
+            std::ofstream outsideFile(outsidePath, std::ios::out | std::ios::trunc);
+            outsideFile << makeMinimalChartJson();
+        }
+        passed &= expectRuntimeError(
             [&path]()
             {
                 Game::ChartLoadOptions options{};
@@ -315,7 +381,6 @@ namespace
                 (void)Game::ChartLoader{options}.loadFromFile(std::string("../outside.json"));
             },
             "path escaping configured asset root should throw");
-        std::filesystem::remove(path);
         return passed;
     }
 
@@ -480,6 +545,7 @@ int main(int argc, char* argv[])
     bool allTestsPassed = true;
     allTestsPassed &= testChartLoaderParsesMinimalChart();
     allTestsPassed &= testChartLoaderParsesHoldNote();
+    allTestsPassed &= testChartLoaderParsesConvertedMcChartShape();
     allTestsPassed &= testBeatPositionNormalization();
     allTestsPassed &= testChartLoaderSortsTimingPointsAndNotes();
     allTestsPassed &= testChartLoaderRejectsInvalidCharts();

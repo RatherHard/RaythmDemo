@@ -58,7 +58,7 @@ namespace Raythm::Game
          * @param jsonText UTF-8 JSON chart content.
          * @return Parsed and validated chart data with sorted timing points and notes.
          * @throws std::runtime_error when JSON syntax or chart validation fails.
-         * @note This pure parsing seam is intended for deterministic Game tests.
+         * @note The pure parsing seam still applies ChartLoadOptions::maxFileSizeBytes to bound in-memory inputs.
          */
         [[nodiscard]] Chart loadFromJsonText(std::string_view jsonText) const;
 
