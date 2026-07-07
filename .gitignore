@@ -123,3 +123,6 @@ tools/__pycache__/
 *.gcno
 *.gcov
 coverage/
+
+# agent worktree
+.claude/
