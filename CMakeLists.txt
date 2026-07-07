@@ -99,6 +99,7 @@ target_link_libraries(RaythmDemoGame PRIVATE
 
 add_library(RaythmDemoCore
     src/Core/Application.cpp
+    src/Core/GameplayRuntimeDriver.cpp
     src/Core/Time.cpp
 )
 
@@ -107,6 +108,8 @@ target_include_directories(RaythmDemoCore PUBLIC
 )
 
 target_link_libraries(RaythmDemoCore PUBLIC
+    RaythmDemoAudio
+    RaythmDemoGame
     RaythmDemoRender
 )
 
@@ -116,6 +119,13 @@ add_executable(RaythmDemo
 
 target_link_libraries(RaythmDemo PRIVATE
     RaythmDemoCore
+)
+
+add_custom_command(TARGET RaythmDemo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:RaythmDemo>/assets
+    COMMENT "Copy runtime assets next to RaythmDemo executable"
 )
 
 add_executable(RaythmDemoEnvironmentTest
@@ -145,6 +155,10 @@ add_executable(RaythmDemoGameplaySessionTest
 
 add_executable(RaythmDemoCoreTest
     tests/core_test.cpp
+)
+
+add_executable(RaythmDemoCoreGameplayRuntimeTest
+    tests/core_gameplay_runtime_test.cpp
 )
 
 add_executable(RaythmDemoRenderTest
@@ -190,6 +204,10 @@ target_link_libraries(RaythmDemoCoreTest PRIVATE
     RaythmDemoCore
 )
 
+target_link_libraries(RaythmDemoCoreGameplayRuntimeTest PRIVATE
+    RaythmDemoCore
+)
+
 target_link_libraries(RaythmDemoRenderTest PRIVATE
     RaythmDemoRender
 )
@@ -205,6 +223,7 @@ add_test(NAME RaythmDemoAudioTest COMMAND RaythmDemoAudioTest)
 add_test(NAME RaythmDemoGameTest COMMAND RaythmDemoGameTest)
 add_test(NAME RaythmDemoGameplaySessionTest COMMAND RaythmDemoGameplaySessionTest)
 add_test(NAME RaythmDemoCoreTest COMMAND RaythmDemoCoreTest)
+add_test(NAME RaythmDemoCoreGameplayRuntimeTest COMMAND RaythmDemoCoreGameplayRuntimeTest)
 add_test(NAME RaythmDemoRenderTest COMMAND RaythmDemoRenderTest)
 add_test(NAME RaythmDemoRenderStrategyTest COMMAND RaythmDemoRenderStrategyTest)
 if(Python3_FOUND)
@@ -275,6 +294,10 @@ if(WIN32)
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
     )
+    target_compile_definitions(RaythmDemoCoreGameplayRuntimeTest PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
     target_compile_definitions(RaythmDemoRenderTest PRIVATE
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX
@@ -299,6 +322,7 @@ if(WIN32)
         target_compile_options(RaythmDemoGameTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoGameplaySessionTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoCoreTest PRIVATE /utf-8)
+        target_compile_options(RaythmDemoCoreGameplayRuntimeTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderTest PRIVATE /utf-8)
         target_compile_options(RaythmDemoRenderStrategyTest PRIVATE /utf-8)
     endif()

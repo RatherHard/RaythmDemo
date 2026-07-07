@@ -6,9 +6,11 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Raythm::Audio
 {
@@ -92,6 +94,14 @@ namespace Raythm::Audio
          * @note A failed load leaves the previous stopped state intact and reports false.
          */
         bool loadMusicFile(const std::string& filePath);
+
+        /**
+         * @brief Loads a music track from verified encoded file bytes.
+         * @param encodedAudioBytes Complete encoded audio file contents supported by miniaudio.
+         * @return True when the bytes are loaded and ready for playback.
+         * @note A failed load leaves the previous stopped state intact and reports false.
+         */
+        bool loadMusicFromMemory(std::vector<std::byte>&& encodedAudioBytes);
 
         /**
          * @brief Loads a deterministic silent test track without touching audio hardware.

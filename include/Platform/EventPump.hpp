@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <deque>
 
 #include <SDL3/SDL.h>
@@ -44,6 +45,9 @@ namespace Raythm::Platform
     {
         /** @brief Translated input event kind, or None when the payload is empty. */
         InputEventType type = InputEventType::None;
+
+        /** @brief SDL event timestamp in nanoseconds for input timing reconstruction. */
+        std::uint64_t timestampNanoseconds = 0;
 
         /** @brief SDL window identifier that owns this input event. */
         SDL_WindowID windowId = 0;

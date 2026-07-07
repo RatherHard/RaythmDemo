@@ -97,13 +97,16 @@ namespace Raythm::Render
 
         /**
          * @brief Clears the current swapchain image and presents it.
-         * @return True when a frame was submitted; false when rendering is paused by a zero drawable size.
-         * @note Swapchain out-of-date and suboptimal results are handled by recreating swapchain resources.
+         * @return High-level frame status describing submission, pause, recovery, or failure.
+         * @note Swapchain out-of-date and suboptimal results are handled without blocking the event pump indefinitely.
          */
-        bool renderFrame();
+        RendererFrameStatus renderFrame();
 
-        /** @brief Blocks until the logical device has completed all queued work. */
-        void waitIdle() const noexcept;
+        /**
+         * @brief Attempts to wait until known frame fences are idle without blocking forever.
+         * @return Bounded wait status describing whether queued frame work completed.
+         */
+        RendererWaitStatus waitIdle() const noexcept;
 
         /** @brief Reports whether initial Vulkan setup completed successfully. */
         bool isInitialized() const noexcept;
@@ -191,7 +194,7 @@ namespace Raythm::Render
         void cleanupSwapchain() noexcept;
 
         /** @brief Recreates swapchain-dependent resources after resize or surface invalidation. */
-        bool recreateSwapchain();
+        RendererFrameStatus recreateSwapchain();
 
         /** @brief Records commands that transition, clear, apply 2D commands, and prepare one image for presentation. */
         void recordFrameCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex) const;

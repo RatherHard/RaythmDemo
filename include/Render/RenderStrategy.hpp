@@ -15,6 +15,48 @@
 namespace Raythm::Render
 {
     /**
+     * @brief Result of bounded Vulkan waits used to keep the runtime event pump responsive.
+     */
+    enum class RendererWaitStatus
+    {
+        /** @brief The waited GPU work completed before the timeout. */
+        Ready,
+
+        /** @brief The bounded wait elapsed before completion. */
+        TimedOut,
+
+        /** @brief Vulkan reported device loss while waiting. */
+        DeviceLost,
+
+        /** @brief Vulkan reported another unrecoverable wait failure. */
+        FatalError
+    };
+
+    /**
+     * @brief High-level renderer frame status consumed by Core runtime orchestration.
+     */
+    enum class RendererFrameStatus
+    {
+        /** @brief A frame was submitted and presented normally. */
+        Submitted,
+
+        /** @brief Rendering was skipped because the drawable surface has no positive size. */
+        NoDrawable,
+
+        /** @brief Swapchain recovery was requested or completed without a fatal error. */
+        RecoveringSwapchain,
+
+        /** @brief A bounded render wait timed out; the caller should keep pumping events. */
+        RenderStalled,
+
+        /** @brief Vulkan reported device loss. */
+        DeviceLost,
+
+        /** @brief Vulkan reported another unrecoverable render failure. */
+        FatalError
+    };
+
+    /**
      * @brief RGBA color used by clear and simple 2D draw commands.
      */
     struct Color
@@ -126,4 +168,26 @@ namespace Raythm::Render
      * @return Vulkan rectangle when any visible pixels remain, otherwise empty.
      */
     [[nodiscard]] std::optional<VkRect2D> clipRectToExtent(const Rect2D& rect, VkExtent2D extent) noexcept;
+
+    /**
+     * @brief Classifies a bounded Vulkan fence wait result for runtime liveness handling.
+     * @param result Vulkan result returned by vkWaitForFences.
+     * @return Renderer wait status used by Core and Renderer policy.
+     */
+    [[nodiscard]] RendererWaitStatus classifyFenceWaitResult(VkResult result) noexcept;
+
+    /**
+     * @brief Classifies a Vulkan acquire result into a high-level frame status.
+     * @param result Vulkan result returned by vkAcquireNextImageKHR.
+     * @return Renderer frame status used by renderFrame.
+     */
+    [[nodiscard]] RendererFrameStatus classifyAcquireResult(VkResult result) noexcept;
+
+    /**
+     * @brief Classifies a Vulkan present result into a high-level frame status.
+     * @param result Vulkan result returned by vkQueuePresentKHR.
+     * @param wasFramebufferResized True when a resize was observed before present classification.
+     * @return Renderer frame status used by renderFrame.
+     */
+    [[nodiscard]] RendererFrameStatus classifyPresentResult(VkResult result, bool wasFramebufferResized) noexcept;
 }

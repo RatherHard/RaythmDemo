@@ -168,6 +168,9 @@ namespace
         passed &= expect(options.startHidden, "default application window should start hidden before renderer init");
         passed &= expect(options.resizable, "default application window should be resizable");
         passed &= expect(options.vulkanSurface, "default application window should support Vulkan surfaces");
+        passed &= expect(options.assetRoot == "assets", "default asset root should use checked-in runtime assets");
+        passed &= expect(options.startupChartPath == "charts/00001/00001.json",
+                         "default startup chart should use checked-in sample chart");
         return passed;
     }
 

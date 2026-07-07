@@ -6,6 +6,7 @@
 #include "Platform/EventPump.hpp"
 #include "Platform/Window.hpp"
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 
@@ -123,11 +124,12 @@ namespace
         SDL_WindowID windowId,
         SDL_Scancode scancode,
         SDL_Keycode key,
-        bool isRepeat = false
-    )
+        bool isRepeat = false,
+        std::uint64_t timestampNanoseconds = 0)
     {
         SDL_Event event{};
         event.key.type = type;
+        event.key.timestamp = timestampNanoseconds;
         event.key.windowID = windowId;
         event.key.scancode = scancode;
         event.key.key = key;
@@ -152,11 +154,13 @@ namespace
         Uint8 button,
         Uint8 clicks,
         float x,
-        float y
+        float y,
+        std::uint64_t timestampNanoseconds = 0
     )
     {
         SDL_Event event{};
         event.button.type = type;
+        event.button.timestamp = timestampNanoseconds;
         event.button.windowID = windowId;
         event.button.button = button;
         event.button.clicks = clicks;
@@ -182,11 +186,13 @@ namespace
         float x,
         float y,
         float xRelative,
-        float yRelative
+        float yRelative,
+        std::uint64_t timestampNanoseconds = 0
     )
     {
         SDL_Event event{};
         event.motion.type = SDL_EVENT_MOUSE_MOTION;
+        event.motion.timestamp = timestampNanoseconds;
         event.motion.windowID = windowId;
         event.motion.state = state;
         event.motion.x = x;
@@ -413,8 +419,14 @@ namespace
         const SDL_WindowID windowId = window.getWindowId();
 
         bool passed = true;
-        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_DOWN, windowId, SDL_SCANCODE_SPACE, SDLK_SPACE, true),
-                         "should push key down event");
+        passed &= expect(pushKeyboardEvent(
+            SDL_EVENT_KEY_DOWN,
+            windowId,
+            SDL_SCANCODE_SPACE,
+            SDLK_SPACE,
+            true,
+            12'345'678ULL),
+            "should push key down event");
 
         Platform::InputEvent event{};
         passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::KeyPressed),
@@ -424,13 +436,21 @@ namespace
         passed &= expect(event.scancode == SDL_SCANCODE_SPACE, "keyboard scancode should match");
         passed &= expect(event.key == SDLK_SPACE, "keyboard keycode should match");
         passed &= expect(event.isRepeat, "keyboard repeat flag should match");
+        passed &= expect(event.timestampNanoseconds == 12'345'678ULL, "keyboard timestamp should match");
 
-        passed &= expect(pushKeyboardEvent(SDL_EVENT_KEY_UP, windowId, SDL_SCANCODE_SPACE, SDLK_SPACE),
-                         "should push key up event");
+        passed &= expect(pushKeyboardEvent(
+            SDL_EVENT_KEY_UP,
+            windowId,
+            SDL_SCANCODE_SPACE,
+            SDLK_SPACE,
+            false,
+            12'345'999ULL),
+            "should push key up event");
         passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::KeyReleased),
                          "key up event should be translated");
         passed &= expect(event.type == Platform::InputEventType::KeyReleased, "key up type should match");
         passed &= expect(!event.isRepeat, "key up repeat flag should remain false");
+        passed &= expect(event.timestampNanoseconds == 12'345'999ULL, "key up timestamp should match");
 
         return passed;
     }
@@ -447,8 +467,15 @@ namespace
         const SDL_WindowID windowId = window.getWindowId();
 
         bool passed = true;
-        passed &= expect(pushMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_DOWN, windowId, SDL_BUTTON_LEFT, 2, 13.5F, 24.25F),
-                         "should push mouse button down event");
+        passed &= expect(pushMouseButtonEvent(
+            SDL_EVENT_MOUSE_BUTTON_DOWN,
+            windowId,
+            SDL_BUTTON_LEFT,
+            2,
+            13.5F,
+            24.25F,
+            22'000'000ULL),
+            "should push mouse button down event");
 
         Platform::InputEvent event{};
         passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::MouseButtonPressed),
@@ -459,15 +486,24 @@ namespace
         passed &= expect(event.clicks == 2, "mouse button click count should match");
         passed &= expect(event.x == 13.5F, "mouse button x should match");
         passed &= expect(event.y == 24.25F, "mouse button y should match");
+        passed &= expect(event.timestampNanoseconds == 22'000'000ULL, "mouse button timestamp should match");
 
-        passed &= expect(pushMouseButtonEvent(SDL_EVENT_MOUSE_BUTTON_UP, windowId, SDL_BUTTON_LEFT, 1, 15.0F, 26.0F),
-                         "should push mouse button up event");
+        passed &= expect(pushMouseButtonEvent(
+            SDL_EVENT_MOUSE_BUTTON_UP,
+            windowId,
+            SDL_BUTTON_LEFT,
+            1,
+            15.0F,
+            26.0F,
+            22'000'333ULL),
+            "should push mouse button up event");
         passed &= expect(pollUntil(eventPump, windowId, event, Platform::InputEventType::MouseButtonReleased),
                          "mouse button up event should be translated");
         passed &= expect(event.type == Platform::InputEventType::MouseButtonReleased, "button up type should match");
         passed &= expect(event.clicks == 1, "mouse button up click count should match");
         passed &= expect(event.x == 15.0F, "mouse button up x should match");
         passed &= expect(event.y == 26.0F, "mouse button up y should match");
+        passed &= expect(event.timestampNanoseconds == 22'000'333ULL, "mouse button up timestamp should match");
 
         return passed;
     }
@@ -485,7 +521,7 @@ namespace
         const SDL_MouseButtonFlags buttonState = SDL_BUTTON_LMASK | SDL_BUTTON_RMASK;
 
         bool passed = true;
-        passed &= expect(pushMouseMotionEvent(windowId, buttonState, 30.0F, 40.0F, -2.0F, 3.5F),
+        passed &= expect(pushMouseMotionEvent(windowId, buttonState, 30.0F, 40.0F, -2.0F, 3.5F, 33'444'555ULL),
                          "should push mouse motion event");
 
         Platform::InputEvent event{};
@@ -498,6 +534,7 @@ namespace
         passed &= expect(event.y == 40.0F, "mouse motion y should match");
         passed &= expect(event.xRelative == -2.0F, "mouse motion relative x should match");
         passed &= expect(event.yRelative == 3.5F, "mouse motion relative y should match");
+        passed &= expect(event.timestampNanoseconds == 33'444'555ULL, "mouse motion timestamp should match");
 
         return passed;
     }

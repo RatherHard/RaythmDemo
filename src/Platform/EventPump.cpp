@@ -367,18 +367,21 @@ namespace Raythm::Platform
         switch (sdlEvent.type)
         {
         case SDL_EVENT_KEY_DOWN:
+            event.timestampNanoseconds = sdlEvent.key.timestamp;
             event.type = InputEventType::KeyPressed;
             event.scancode = sdlEvent.key.scancode;
             event.key = sdlEvent.key.key;
             event.isRepeat = sdlEvent.key.repeat;
             break;
         case SDL_EVENT_KEY_UP:
+            event.timestampNanoseconds = sdlEvent.key.timestamp;
             event.type = InputEventType::KeyReleased;
             event.scancode = sdlEvent.key.scancode;
             event.key = sdlEvent.key.key;
             event.isRepeat = sdlEvent.key.repeat;
             break;
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            event.timestampNanoseconds = sdlEvent.button.timestamp;
             event.type = InputEventType::MouseButtonPressed;
             event.mouseButton = sdlEvent.button.button;
             event.clicks = sdlEvent.button.clicks;
@@ -386,6 +389,7 @@ namespace Raythm::Platform
             event.y = sdlEvent.button.y;
             break;
         case SDL_EVENT_MOUSE_BUTTON_UP:
+            event.timestampNanoseconds = sdlEvent.button.timestamp;
             event.type = InputEventType::MouseButtonReleased;
             event.mouseButton = sdlEvent.button.button;
             event.clicks = sdlEvent.button.clicks;
@@ -393,6 +397,7 @@ namespace Raythm::Platform
             event.y = sdlEvent.button.y;
             break;
         case SDL_EVENT_MOUSE_MOTION:
+            event.timestampNanoseconds = sdlEvent.motion.timestamp;
             event.type = InputEventType::MouseMoved;
             event.mouseButtonState = sdlEvent.motion.state;
             event.x = sdlEvent.motion.x;

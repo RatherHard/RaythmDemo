@@ -73,7 +73,9 @@ namespace
             passed &= expect(renderer.isInitialized(), "renderer should report initialized after construction");
             passed &= expect(!renderer.isRenderingPaused(), "renderer should not start paused for a positive drawable size");
 
-            renderer.renderFrame();
+            passed &= expect(
+                renderer.renderFrame() == Render::RendererFrameStatus::Submitted,
+                "first render frame should submit");
 
             const std::vector<Render::RenderCommand> commands = {
                 {{16, 16, 48, 128}, {0.12F, 0.25F, 0.82F, 1.0F}},
@@ -83,7 +85,9 @@ namespace
             passed &= expect(
                 renderer.getPending2DCommandCount() == commands.size(),
                 "renderer should retain submitted 2D commands for the next frame");
-            renderer.renderFrame();
+            passed &= expect(
+                renderer.renderFrame() == Render::RendererFrameStatus::Submitted,
+                "2D command render frame should submit");
             renderer.clear2DCommands();
             passed &= expect(
                 renderer.getPending2DCommandCount() == 0,
@@ -94,8 +98,14 @@ namespace
             resizeEvent.width = TEST_WINDOW_WIDTH;
             resizeEvent.height = TEST_WINDOW_HEIGHT;
             renderer.handleWindowEvent(resizeEvent);
-            renderer.renderFrame();
-            renderer.waitIdle();
+            const Render::RendererFrameStatus resizeStatus = renderer.renderFrame();
+            passed &= expect(
+                resizeStatus == Render::RendererFrameStatus::Submitted ||
+                    resizeStatus == Render::RendererFrameStatus::RecoveringSwapchain,
+                "resize render frame should submit or recover swapchain");
+            passed &= expect(
+                renderer.waitIdle() == Render::RendererWaitStatus::Ready,
+                "renderer should finish queued frame work before test exit");
 
             return passed;
         }

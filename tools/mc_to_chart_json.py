@@ -92,28 +92,39 @@ def _read_int(mapping, field, context, *, minimum=INT32_MIN, maximum=INT32_MAX):
 
 
 def _read_beat_tuple(value, context):
-    """Read and validate a RaythmDemo beat tuple."""
+    """Read and validate a Malody beat tuple."""
     if not isinstance(value, list) or len(value) != 3:
         raise _conversion_error(f"{context} must be a three-integer beat array")
     if not all(_is_integer(entry) for entry in value):
         raise _conversion_error(f"{context} entries must be integers")
 
-    measure, numerator, denominator = value
+    beat_index, numerator, denominator = value
     if any(abs(component) > MAX_BEAT_TUPLE_COMPONENT for component in value):
         raise _conversion_error(f"{context} entries are outside the supported beat component range")
-    if measure < 0:
-        raise _conversion_error(f"{context} measure must be greater than or equal to zero")
+    if beat_index < 0:
+        raise _conversion_error(f"{context} beat index must be greater than or equal to zero")
     if denominator <= 0:
         raise _conversion_error(f"{context} denominator must be greater than zero")
     if numerator < 0 or numerator >= denominator:
         raise _conversion_error(f"{context} numerator must satisfy 0 <= y < z")
-    return [measure, numerator, denominator]
+    return [beat_index, numerator, denominator]
+
+
+def _convert_malody_beat_to_raythm(beat):
+    """Convert Malody beat-index tuples to RaythmDemo measure-based beat tuples."""
+    beat_index, numerator, denominator = beat
+    measure = beat_index // 4
+    beat_in_measure = beat_index % 4
+    converted_numerator = beat_in_measure * denominator + numerator
+    converted_denominator = denominator * 4
+    divisor = math.gcd(converted_numerator, converted_denominator)
+    return [measure, converted_numerator // divisor, converted_denominator // divisor]
 
 
 def _beat_key(beat):
-    """Normalize a beat tuple into whole-beat units for comparison."""
-    measure, numerator, denominator = beat
-    return Fraction(measure * 4, 1) + Fraction(numerator * 4, denominator)
+    """Normalize a Malody beat tuple into whole-beat units for comparison."""
+    beat_index, numerator, denominator = beat
+    return Fraction(beat_index, 1) + Fraction(numerator, denominator)
 
 
 def _read_song_metadata(meta):
@@ -164,7 +175,7 @@ def _read_timing_points(time_array):
         if normalized_beat in seen_beats:
             raise _conversion_error("duplicate BPM entries at the same normalized beat are not allowed")
         seen_beats.add(normalized_beat)
-        timing_points.append({"beat": beat, "bpm": bpm})
+        timing_points.append({"beat": _convert_malody_beat_to_raythm(beat), "bpm": bpm})
 
     timing_points.sort(key=lambda point: _beat_key(point["beat"]))
     if _beat_key(timing_points[0]["beat"]) != ZERO_BEAT:
@@ -193,12 +204,12 @@ def _read_playable_note(note_object, context, lane_count):
     if column < 0 or column >= lane_count:
         raise _conversion_error(f"{context}.column must be in range [0, {lane_count - 1}]")
 
-    converted = {"beat": beat, "column": column}
+    converted = {"beat": _convert_malody_beat_to_raythm(beat), "column": column}
     if "endbeat" in note_object:
         endbeat = _read_beat_tuple(note_object["endbeat"], f"{context}.endbeat")
         if _beat_key(endbeat) <= _beat_key(beat):
             raise _conversion_error(f"{context}.endbeat must be greater than beat")
-        converted["endbeat"] = endbeat
+        converted["endbeat"] = _convert_malody_beat_to_raythm(endbeat)
     return converted
 
 

@@ -416,15 +416,15 @@ namespace
 
     /**
      * @brief Verifies chart offset shifts the note target time.
-     * @return True when offset is applied as target time plus metadata offset.
+     * @return True when positive offset makes notes occur earlier in audio playback time.
      */
     bool testGameplaySessionAppliesChartOffsetToTargetTime()
     {
         Game::GameplaySession session{makeRuntimeChart({makeTapNote(2, 1)}, 50)};
-        pressLaneAt(session, 929, 1);
+        pressLaneAt(session, 829, 1);
         bool passed = true;
         passed &= expect(session.getJudgementEvents().empty(), "pre-offset target before Bad window should be too early and not judge");
-        pressLaneAt(session, 1050, 1);
+        pressLaneAt(session, 950, 1);
         passed &= expectLastJudgement(session, Game::JudgementResult::CriticalPerfect, "offset target should judge exactly at shifted time");
         return passed;
     }

@@ -3,8 +3,12 @@
 // Author: RatherHard
 // Date: 2026-07-04
 
+#include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Test headers
 #include "miniaudio.h"
@@ -38,6 +42,67 @@ bool testMiniaudio()
     ma_engine_uninit(&engine);
     std::cout << "miniaudio engine uninitialized successfully" << std::endl;
 
+    return true;
+}
+
+/**
+ * @brief Verifies that miniaudio can decode the project's canonical Ogg Vorbis chart audio asset.
+ * @return True when the decoder initializes, reports sane output format data, and reads PCM frames.
+ * @note This avoids opening an audio device so codec support is tested independently from host backend availability.
+ */
+bool testMiniaudioVorbisDecode()
+{
+    std::cout << "\n=== Testing miniaudio Vorbis decoding ===" << std::endl;
+
+    const std::filesystem::path oggPath = std::filesystem::path(__FILE__).parent_path().parent_path() /
+        "assets/charts/00001/00001.ogg";
+    const std::uintmax_t fileSize = std::filesystem::file_size(oggPath);
+    std::vector<std::byte> oggBytes(static_cast<std::size_t>(fileSize));
+    std::ifstream input{oggPath, std::ios::binary};
+    input.read(reinterpret_cast<char*>(oggBytes.data()), static_cast<std::streamsize>(oggBytes.size()));
+    if (!input)
+    {
+        std::cerr << "Failed to read project Vorbis asset bytes." << std::endl;
+        return false;
+    }
+
+    ma_decoder decoder{};
+    const ma_result initResult = ma_decoder_init_memory(oggBytes.data(), oggBytes.size(), nullptr, &decoder);
+    if (initResult != MA_SUCCESS)
+    {
+        std::cerr << "Failed to initialize Vorbis decoder for project asset. Error code: "
+                  << initResult << std::endl;
+        return false;
+    }
+
+    ma_format format = ma_format_unknown;
+    ma_uint32 channels = 0;
+    ma_uint32 sampleRate = 0;
+    const ma_result formatResult = ma_decoder_get_data_format(&decoder, &format, &channels, &sampleRate, nullptr, 0);
+    if (formatResult != MA_SUCCESS || format == ma_format_unknown || channels == 0 || sampleRate == 0)
+    {
+        std::cerr << "Failed to query sane Vorbis decoder format. Error code: "
+                  << formatResult << ", channels: " << channels << ", sample rate: " << sampleRate << std::endl;
+        ma_decoder_uninit(&decoder);
+        return false;
+    }
+
+    std::vector<float> pcmFrames(static_cast<std::size_t>(channels) * 512U, 0.0F);
+    ma_uint64 framesRead = 0;
+    const ma_result readResult = ma_decoder_read_pcm_frames(&decoder, pcmFrames.data(), 512, &framesRead);
+    if ((readResult != MA_SUCCESS && readResult != MA_AT_END) || framesRead == 0)
+    {
+        std::cerr << "Failed to decode PCM frames from project Vorbis asset. Error code: "
+                  << readResult << ", frames read: " << framesRead << std::endl;
+        ma_decoder_uninit(&decoder);
+        return false;
+    }
+
+    std::cout << "Vorbis decoder initialized successfully" << std::endl;
+    std::cout << "Channels: " << channels << ", sample rate: " << sampleRate << std::endl;
+    std::cout << "Decoded frames: " << framesRead << std::endl;
+
+    ma_decoder_uninit(&decoder);
     return true;
 }
 
@@ -179,6 +244,7 @@ int main(int argc, char* argv[])
     bool allTestsPassed = true;
 
     allTestsPassed &= testMiniaudio();
+    allTestsPassed &= testMiniaudioVorbisDecode();
     allTestsPassed &= testVulkan();
     allTestsPassed &= testSDL3();
     allTestsPassed &= testJSON();

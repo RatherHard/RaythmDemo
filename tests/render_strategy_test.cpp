@@ -180,6 +180,78 @@ namespace
         passed &= expect(!overflow.has_value(), "overflow-edge rectangle should be rejected without wrapping");
         return passed;
     }
+
+    /**
+     * @brief Verifies fence wait result classification can distinguish success, stalls, and fatal device loss.
+     * @return True when fence result classification preserves runtime liveness decisions.
+     */
+    bool testFenceWaitResultClassification()
+    {
+        bool passed = true;
+        passed &= expect(
+            Render::classifyFenceWaitResult(VK_SUCCESS) == Render::RendererWaitStatus::Ready,
+            "successful fence wait should be ready");
+        passed &= expect(
+            Render::classifyFenceWaitResult(VK_TIMEOUT) == Render::RendererWaitStatus::TimedOut,
+            "timeout fence wait should be observable as timed out");
+        passed &= expect(
+            Render::classifyFenceWaitResult(VK_ERROR_DEVICE_LOST) == Render::RendererWaitStatus::DeviceLost,
+            "device-lost fence wait should be fatal");
+        passed &= expect(
+            Render::classifyFenceWaitResult(VK_ERROR_OUT_OF_HOST_MEMORY) == Render::RendererWaitStatus::FatalError,
+            "unexpected fence wait failure should be fatal");
+        return passed;
+    }
+
+    /**
+     * @brief Verifies swapchain acquire result classification distinguishes recoverable resize and stalls.
+     * @return True when acquire result classification matches renderer runtime behavior.
+     */
+    bool testAcquireResultClassification()
+    {
+        bool passed = true;
+        passed &= expect(
+            Render::classifyAcquireResult(VK_SUCCESS) == Render::RendererFrameStatus::Submitted,
+            "successful acquire should allow frame submission");
+        passed &= expect(
+            Render::classifyAcquireResult(VK_SUBOPTIMAL_KHR) == Render::RendererFrameStatus::Submitted,
+            "suboptimal acquire should still allow this frame");
+        passed &= expect(
+            Render::classifyAcquireResult(VK_ERROR_OUT_OF_DATE_KHR) == Render::RendererFrameStatus::RecoveringSwapchain,
+            "out-of-date acquire should request swapchain recovery");
+        passed &= expect(
+            Render::classifyAcquireResult(VK_TIMEOUT) == Render::RendererFrameStatus::RenderStalled,
+            "acquire timeout should keep the event pump alive as a stall");
+        passed &= expect(
+            Render::classifyAcquireResult(VK_ERROR_DEVICE_LOST) == Render::RendererFrameStatus::DeviceLost,
+            "device-lost acquire should be fatal");
+        return passed;
+    }
+
+    /**
+     * @brief Verifies present result classification distinguishes normal, recovery, and fatal outcomes.
+     * @return True when present result classification matches renderer runtime behavior.
+     */
+    bool testPresentResultClassification()
+    {
+        bool passed = true;
+        passed &= expect(
+            Render::classifyPresentResult(VK_SUCCESS, false) == Render::RendererFrameStatus::Submitted,
+            "successful present should submit a frame");
+        passed &= expect(
+            Render::classifyPresentResult(VK_SUCCESS, true) == Render::RendererFrameStatus::RecoveringSwapchain,
+            "successful present with resize flag should recover swapchain");
+        passed &= expect(
+            Render::classifyPresentResult(VK_SUBOPTIMAL_KHR, false) == Render::RendererFrameStatus::RecoveringSwapchain,
+            "suboptimal present should recover swapchain");
+        passed &= expect(
+            Render::classifyPresentResult(VK_ERROR_OUT_OF_DATE_KHR, false) == Render::RendererFrameStatus::RecoveringSwapchain,
+            "out-of-date present should recover swapchain");
+        passed &= expect(
+            Render::classifyPresentResult(VK_ERROR_DEVICE_LOST, false) == Render::RendererFrameStatus::DeviceLost,
+            "device-lost present should be fatal");
+        return passed;
+    }
 }
 
 /**
@@ -199,6 +271,9 @@ int main(int argc, char* argv[])
     allTestsPassed &= testSwapchainExtentSelection();
     allTestsPassed &= testQueueFamilySelection();
     allTestsPassed &= testRenderCommandClipping();
+    allTestsPassed &= testFenceWaitResultClassification();
+    allTestsPassed &= testAcquireResultClassification();
+    allTestsPassed &= testPresentResultClassification();
 
     return allTestsPassed ? 0 : 1;
 }

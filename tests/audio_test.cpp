@@ -6,9 +6,13 @@
 #include "Audio/AudioEngine.hpp"
 
 #include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -53,6 +57,22 @@ namespace
         /** @brief Current synthetic monotonic time. */
         Audio::AudioTimePoint m_currentTime{};
     };
+
+    /** @brief Reads the project's canonical Ogg Vorbis chart audio asset for memory-backed playback tests. */
+    std::vector<std::byte> readProjectOggAssetBytes()
+    {
+        const std::filesystem::path oggPath = std::filesystem::path(__FILE__).parent_path().parent_path() /
+            "assets/charts/00001/00001.ogg";
+        const std::uintmax_t fileSize = std::filesystem::file_size(oggPath);
+        std::vector<std::byte> bytes(static_cast<std::size_t>(fileSize));
+        std::ifstream input{oggPath, std::ios::binary};
+        input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!input)
+        {
+            return {};
+        }
+        return bytes;
+    }
 
     /** @brief Verifies a test-clock engine starts stopped with no playback position. */
     bool testAudioEngineStartsStopped()
@@ -234,6 +254,31 @@ namespace
         return passed;
     }
 
+    /** @brief Verifies real Ogg Vorbis music bytes load through the same memory-backed seam used by startup. */
+    bool testProjectOggVorbisMemoryTrackLoadsWhenBackendAvailable()
+    {
+        Audio::AudioEngine engine{};
+        if (!engine.isBackendAvailable())
+        {
+            std::cout << "SKIPPED: real audio backend unavailable; cannot verify Ogg Vorbis memory loading"
+                      << std::endl;
+            return true;
+        }
+
+        std::vector<std::byte> oggBytes = readProjectOggAssetBytes();
+        const bool loaded = engine.loadMusicFromMemory(std::move(oggBytes));
+
+        bool passed = true;
+        passed &= expect(loaded, "project Ogg Vorbis music bytes should load successfully");
+        passed &= expect(engine.hasLoadedTrack(), "valid Ogg Vorbis bytes should report a loaded track");
+        passed &= expect(engine.getState() == Audio::PlaybackState::Stopped,
+                         "successful Ogg Vorbis load should leave playback stopped");
+        passed &= expectNear(engine.getPlaybackTimeSeconds(), 0.0, 0.000001,
+                             "successful Ogg Vorbis load should not advance playback time");
+        passed &= expect(engine.play(), "loaded Ogg Vorbis track should start playback");
+        return passed;
+    }
+
     /** @brief Verifies play without a loaded track fails instead of inventing playback. */
     bool testPlayWithoutTrackFails()
     {
@@ -273,6 +318,7 @@ int main(int argc, char* argv[])
     allTestsPassed &= testInvalidTestTrackDurationsFail();
     allTestsPassed &= testMissingFileLoadFailsWithoutDeviceDependency();
     allTestsPassed &= testEmbeddedNullFilePathFails();
+    allTestsPassed &= testProjectOggVorbisMemoryTrackLoadsWhenBackendAvailable();
     allTestsPassed &= testPlayWithoutTrackFails();
 
     return allTestsPassed ? 0 : 1;

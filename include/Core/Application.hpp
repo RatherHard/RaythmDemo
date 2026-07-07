@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 #include "Core/Time.hpp"
@@ -66,6 +67,12 @@ namespace Raythm::Core
 
         /** @brief Enables SDL Vulkan surface support for the renderer. */
         bool vulkanSurface = true;
+
+        /** @brief Root directory for runtime chart and audio assets. */
+        std::filesystem::path assetRoot = "assets";
+
+        /** @brief Startup chart path resolved under assetRoot. */
+        std::filesystem::path startupChartPath = "charts/00001/00001.json";
     };
 
     /**

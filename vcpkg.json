@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "Cross-platform rhythm game built with C++20",
   "dependencies": [
-    "sdl3",
+    {
+      "name": "sdl3",
+      "features": ["vulkan"]
+    },
     "nlohmann-json",
     "volk"
   ],

@@ -220,12 +220,12 @@ namespace Raythm::Game
         }
 
         /**
-         * @brief Adds metadata offset to a resolved beat time.
+         * @brief Applies metadata offset to a resolved beat time.
          * @param beatTime Time resolved from BPM timing points.
          * @param offsetMilliseconds Chart metadata offset in milliseconds.
          * @return Target judgement time after offset application.
          * @throws std::runtime_error when the offset would make target time negative.
-         * @note The initial convention is target time equals resolved beat time plus chart offset.
+         * @note Positive chart offsets mean music playback is delayed relative to chart time, so notes occur earlier in audio time.
          */
         std::chrono::microseconds applyChartOffset(
             std::chrono::microseconds beatTime,
@@ -233,16 +233,16 @@ namespace Raythm::Game
         {
             const std::chrono::microseconds offset = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::milliseconds{offsetMilliseconds});
-            if (offset.count() < 0 && beatTime < -offset)
+            if (offset.count() > 0 && beatTime < offset)
             {
                 throw sessionError("chart offset moves a note before time zero");
             }
-            if (offset.count() > 0 && beatTime > std::chrono::microseconds::max() - offset)
+            if (offset.count() < 0 && beatTime > std::chrono::microseconds::max() + offset)
             {
                 throw sessionError("chart offset moves a note outside the supported duration range");
             }
 
-            return beatTime + offset;
+            return beatTime - offset;
         }
 
         /**

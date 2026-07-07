@@ -106,8 +106,8 @@ class McToChartJsonTests(unittest.TestCase):
                     {"beat": [0, 0, 1], "bpm": 120.0},
                 ],
                 "note": [
-                    {"beat": [1, 0, 1], "endbeat": [1, 1, 2], "column": 1},
-                    {"beat": [2, 0, 1], "column": 2},
+                    {"beat": [0, 1, 4], "endbeat": [0, 3, 8], "column": 1},
+                    {"beat": [0, 1, 2], "column": 2},
                 ],
             },
         )

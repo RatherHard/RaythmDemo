@@ -170,4 +170,53 @@ namespace Raythm::Render
         };
         return clipped;
     }
+
+    RendererWaitStatus classifyFenceWaitResult(VkResult result) noexcept
+    {
+        switch (result)
+        {
+        case VK_SUCCESS:
+            return RendererWaitStatus::Ready;
+        case VK_TIMEOUT:
+            return RendererWaitStatus::TimedOut;
+        case VK_ERROR_DEVICE_LOST:
+            return RendererWaitStatus::DeviceLost;
+        default:
+            return RendererWaitStatus::FatalError;
+        }
+    }
+
+    RendererFrameStatus classifyAcquireResult(VkResult result) noexcept
+    {
+        switch (result)
+        {
+        case VK_SUCCESS:
+        case VK_SUBOPTIMAL_KHR:
+            return RendererFrameStatus::Submitted;
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return RendererFrameStatus::RecoveringSwapchain;
+        case VK_TIMEOUT:
+            return RendererFrameStatus::RenderStalled;
+        case VK_ERROR_DEVICE_LOST:
+            return RendererFrameStatus::DeviceLost;
+        default:
+            return RendererFrameStatus::FatalError;
+        }
+    }
+
+    RendererFrameStatus classifyPresentResult(VkResult result, bool wasFramebufferResized) noexcept
+    {
+        switch (result)
+        {
+        case VK_SUCCESS:
+            return wasFramebufferResized ? RendererFrameStatus::RecoveringSwapchain : RendererFrameStatus::Submitted;
+        case VK_SUBOPTIMAL_KHR:
+        case VK_ERROR_OUT_OF_DATE_KHR:
+            return RendererFrameStatus::RecoveringSwapchain;
+        case VK_ERROR_DEVICE_LOST:
+            return RendererFrameStatus::DeviceLost;
+        default:
+            return RendererFrameStatus::FatalError;
+        }
+    }
 }

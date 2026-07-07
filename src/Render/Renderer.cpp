@@ -25,12 +25,87 @@ namespace Raythm::Render
         /** @brief Engine name passed into Vulkan instance creation. */
         constexpr const char* ENGINE_NAME = "RaythmDemo";
 
+        /** @brief Bounded wait used for per-frame fence synchronization. */
+        constexpr std::uint64_t FRAME_FENCE_WAIT_TIMEOUT_NANOSECONDS = 250'000'000;
+
+        /** @brief Bounded wait used for swapchain image acquisition. */
+        constexpr std::uint64_t SWAPCHAIN_ACQUIRE_TIMEOUT_NANOSECONDS = 250'000'000;
+
+        /** @brief Bounded wait used for present queue idleness before swapchain teardown. */
+        constexpr std::uint64_t PRESENT_QUEUE_IDLE_WAIT_TIMEOUT_NANOSECONDS = 1'000'000'000;
+
+        /** @brief Converts a renderer frame status into diagnostic text. */
+        const char* describeFrameStatus(RendererFrameStatus status) noexcept
+        {
+            switch (status)
+            {
+            case RendererFrameStatus::Submitted:
+                return "submitted";
+            case RendererFrameStatus::NoDrawable:
+                return "no drawable";
+            case RendererFrameStatus::RecoveringSwapchain:
+                return "recovering swapchain";
+            case RendererFrameStatus::RenderStalled:
+                return "render stalled";
+            case RendererFrameStatus::DeviceLost:
+                return "device lost";
+            case RendererFrameStatus::FatalError:
+                return "fatal error";
+            default:
+                return "unknown";
+            }
+        }
+
         /**
-         * @brief Converts a Vulkan result code into an exception with context.
+         * @brief Converts a non-success renderer status into an exception with context.
          * @param message High-level failure context.
-         * @param result Vulkan result returned by the failed call.
-         * @return Runtime error containing the result code.
+         * @param status Renderer status returned by a classified Vulkan call.
+         * @return Runtime error containing the status name.
          */
+        std::runtime_error makeRendererStatusError(const std::string& message, RendererFrameStatus status)
+        {
+            return std::runtime_error(message + " status=" + describeFrameStatus(status));
+        }
+
+        /**
+         * @brief Waits for present queue ownership before swapchain teardown.
+         * @param queue Present queue to wait on.
+         * @return Ready when the queue became idle; DeviceLost or FatalError otherwise.
+         * @note Vulkan exposes no timeout for queue idle, so callers only use this after bounded frame-fence waits pass.
+         */
+        RendererWaitStatus waitPresentQueueIdle(VkDevice device, VkQueue queue) noexcept
+        {
+            if (device == VK_NULL_HANDLE || queue == VK_NULL_HANDLE)
+            {
+                return RendererWaitStatus::Ready;
+            }
+
+            VkFenceCreateInfo fenceInfo{};
+            fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+            VkFence fence = VK_NULL_HANDLE;
+            VkResult result = vkCreateFence(device, &fenceInfo, nullptr, &fence);
+            if (result != VK_SUCCESS)
+            {
+                return result == VK_ERROR_DEVICE_LOST ? RendererWaitStatus::DeviceLost : RendererWaitStatus::FatalError;
+            }
+
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            result = vkQueueSubmit(queue, 1, &submitInfo, fence);
+            if (result == VK_SUCCESS)
+            {
+                result = vkWaitForFences(
+                    device,
+                    1,
+                    &fence,
+                    VK_TRUE,
+                    PRESENT_QUEUE_IDLE_WAIT_TIMEOUT_NANOSECONDS);
+            }
+
+            vkDestroyFence(device, fence, nullptr);
+            return classifyFenceWaitResult(result);
+        }
+
         std::runtime_error makeVulkanError(const std::string& message, VkResult result)
         {
             return std::runtime_error(message + " VkResult=" + std::to_string(static_cast<int>(result)));
@@ -78,7 +153,18 @@ namespace Raythm::Render
 
     void Renderer::destroyResources() noexcept
     {
-        waitIdle();
+        if (m_device != VK_NULL_HANDLE)
+        {
+            const RendererWaitStatus frameIdleStatus = waitIdle();
+            const RendererWaitStatus presentIdleStatus = frameIdleStatus == RendererWaitStatus::Ready
+                ? waitPresentQueueIdle(m_device, m_presentQueue)
+                : frameIdleStatus;
+            if (presentIdleStatus != RendererWaitStatus::Ready)
+            {
+                m_initialized = false;
+                return;
+            }
+        }
         cleanupSwapchain();
 
         if (m_renderPass != VK_NULL_HANDLE)
@@ -230,7 +316,7 @@ namespace Raythm::Render
         }
     }
 
-    bool Renderer::renderFrame()
+    RendererFrameStatus Renderer::renderFrame()
     {
         if (m_window == nullptr || m_device == VK_NULL_HANDLE)
         {
@@ -241,20 +327,35 @@ namespace Raythm::Render
         if (drawableWidth <= 0 || drawableHeight <= 0)
         {
             m_renderingPaused = true;
-            return false;
+            return RendererFrameStatus::NoDrawable;
         }
 
         if (m_renderingPaused || m_framebufferResized || m_swapchain == VK_NULL_HANDLE)
         {
-            if (!recreateSwapchain())
+            const RendererFrameStatus recreateStatus = recreateSwapchain();
+            if (recreateStatus != RendererFrameStatus::Submitted)
             {
-                return false;
+                return recreateStatus;
             }
         }
 
         VkFence inFlightFence = m_inFlightFences[m_currentFrame];
-        VkResult result = vkWaitForFences(m_device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
-        if (result != VK_SUCCESS)
+        VkResult result = vkWaitForFences(
+            m_device,
+            1,
+            &inFlightFence,
+            VK_TRUE,
+            FRAME_FENCE_WAIT_TIMEOUT_NANOSECONDS);
+        const RendererWaitStatus fenceStatus = classifyFenceWaitResult(result);
+        if (fenceStatus == RendererWaitStatus::TimedOut)
+        {
+            return RendererFrameStatus::RenderStalled;
+        }
+        if (fenceStatus == RendererWaitStatus::DeviceLost)
+        {
+            return RendererFrameStatus::DeviceLost;
+        }
+        if (fenceStatus != RendererWaitStatus::Ready)
         {
             throw makeVulkanError("Failed to wait for frame fence.", result);
         }
@@ -263,17 +364,21 @@ namespace Raythm::Render
         result = vkAcquireNextImageKHR(
             m_device,
             m_swapchain,
-            UINT64_MAX,
+            SWAPCHAIN_ACQUIRE_TIMEOUT_NANOSECONDS,
             m_imageAvailableSemaphores[m_currentFrame],
             VK_NULL_HANDLE,
             &imageIndex);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR)
+        const RendererFrameStatus acquireStatus = classifyAcquireResult(result);
+        if (acquireStatus == RendererFrameStatus::RecoveringSwapchain)
         {
             return recreateSwapchain();
         }
-
-        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        if (acquireStatus == RendererFrameStatus::RenderStalled || acquireStatus == RendererFrameStatus::DeviceLost)
+        {
+            return acquireStatus;
+        }
+        if (acquireStatus != RendererFrameStatus::Submitted)
         {
             throw makeVulkanError("Failed to acquire swapchain image.", result);
         }
@@ -319,26 +424,57 @@ namespace Raythm::Render
         presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_framebufferResized)
+        const RendererFrameStatus presentStatus = classifyPresentResult(result, m_framebufferResized);
+        if (presentStatus == RendererFrameStatus::RecoveringSwapchain)
         {
             m_framebufferResized = false;
-            recreateSwapchain();
+            const RendererFrameStatus recreateStatus = recreateSwapchain();
+            if (recreateStatus != RendererFrameStatus::Submitted)
+            {
+                return recreateStatus;
+            }
         }
-        else if (result != VK_SUCCESS)
+        else if (presentStatus == RendererFrameStatus::DeviceLost)
         {
-            throw makeVulkanError("Failed to present swapchain image.", result);
+            return RendererFrameStatus::DeviceLost;
+        }
+        else if (presentStatus != RendererFrameStatus::Submitted)
+        {
+            throw makeRendererStatusError("Failed to present swapchain image.", presentStatus);
         }
 
         m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-        return true;
+        return RendererFrameStatus::Submitted;
     }
 
-    void Renderer::waitIdle() const noexcept
+    RendererWaitStatus Renderer::waitIdle() const noexcept
     {
-        if (m_device != VK_NULL_HANDLE)
+        if (m_device == VK_NULL_HANDLE)
         {
-            vkDeviceWaitIdle(m_device);
+            return RendererWaitStatus::Ready;
         }
+
+        for (VkFence fence : m_inFlightFences)
+        {
+            if (fence == VK_NULL_HANDLE)
+            {
+                continue;
+            }
+
+            const VkResult result = vkWaitForFences(
+                m_device,
+                1,
+                &fence,
+                VK_TRUE,
+                FRAME_FENCE_WAIT_TIMEOUT_NANOSECONDS);
+            const RendererWaitStatus status = classifyFenceWaitResult(result);
+            if (status != RendererWaitStatus::Ready)
+            {
+                return status;
+            }
+        }
+
+        return RendererWaitStatus::Ready;
     }
 
     bool Renderer::isInitialized() const noexcept
@@ -758,16 +894,39 @@ namespace Raythm::Render
         m_swapchainExtent = {};
     }
 
-    bool Renderer::recreateSwapchain()
+    RendererFrameStatus Renderer::recreateSwapchain()
     {
         const auto [drawableWidth, drawableHeight] = m_window->getDrawableSize();
         if (drawableWidth <= 0 || drawableHeight <= 0)
         {
             m_renderingPaused = true;
-            return false;
+            return RendererFrameStatus::NoDrawable;
         }
 
-        waitIdle();
+        const RendererWaitStatus idleStatus = waitIdle();
+        if (idleStatus == RendererWaitStatus::TimedOut)
+        {
+            return RendererFrameStatus::RenderStalled;
+        }
+        if (idleStatus == RendererWaitStatus::DeviceLost)
+        {
+            return RendererFrameStatus::DeviceLost;
+        }
+        if (idleStatus != RendererWaitStatus::Ready)
+        {
+            return RendererFrameStatus::FatalError;
+        }
+
+        const RendererWaitStatus presentIdleStatus = waitPresentQueueIdle(m_device, m_presentQueue);
+        if (presentIdleStatus == RendererWaitStatus::DeviceLost)
+        {
+            return RendererFrameStatus::DeviceLost;
+        }
+        if (presentIdleStatus != RendererWaitStatus::Ready)
+        {
+            return RendererFrameStatus::FatalError;
+        }
+
         cleanupSwapchain();
         if (m_renderPass != VK_NULL_HANDLE)
         {
@@ -781,7 +940,7 @@ namespace Raythm::Render
             createRenderPass();
             createFramebuffers();
         }
-        return !m_renderingPaused;
+        return m_renderingPaused ? RendererFrameStatus::NoDrawable : RendererFrameStatus::Submitted;
     }
 
     void Renderer::recordFrameCommandBuffer(VkCommandBuffer commandBuffer, std::uint32_t imageIndex) const
