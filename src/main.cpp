@@ -5,6 +5,8 @@
 
 #include "Core/Application.hpp"
 
+#include <SDL3/SDL_main.h>
+
 /**
  * @brief Starts the RaythmDemo application executable.
  * @param argc Number of command-line arguments supplied by the platform runtime.

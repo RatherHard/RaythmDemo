@@ -238,6 +238,17 @@ endif()
 # Platform-specific settings
 if(WIN32)
     # Windows-specific settings
+    set_target_properties(RaythmDemo PROPERTIES WIN32_EXECUTABLE TRUE)
+    get_target_property(RAYTHMDEMO_IS_WIN32_EXECUTABLE RaythmDemo WIN32_EXECUTABLE)
+    if(NOT RAYTHMDEMO_IS_WIN32_EXECUTABLE)
+        message(FATAL_ERROR "RaythmDemo must use the Windows GUI subsystem so the game does not open a console window")
+    endif()
+    get_target_property(RAYTHMDEMO_WINDOW_TEST_IS_WIN32_EXECUTABLE RaythmDemoWindowTest WIN32_EXECUTABLE)
+    get_target_property(RAYTHMDEMO_CORE_TEST_IS_WIN32_EXECUTABLE RaythmDemoCoreTest WIN32_EXECUTABLE)
+    if(RAYTHMDEMO_WINDOW_TEST_IS_WIN32_EXECUTABLE OR RAYTHMDEMO_CORE_TEST_IS_WIN32_EXECUTABLE)
+        message(FATAL_ERROR "RaythmDemo test targets must remain console executables for visible CTest diagnostics")
+    endif()
+
     target_compile_definitions(RaythmDemoPlatform PUBLIC
         _CRT_SECURE_NO_WARNINGS
         NOMINMAX

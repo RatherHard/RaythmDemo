@@ -196,6 +196,13 @@ namespace Raythm::Platform
         /** @brief Hides the native window through SDL. */
         void hide();
 
+        /**
+         * @brief Best-effort request that the platform raises this window for user input.
+         * @return True when SDL accepted the raise/sync request, false when the platform refused or the window is empty.
+         * @note Window managers may legally deny focus stealing; callers must treat failure as non-fatal.
+         */
+        bool requestInputFocus() noexcept;
+
         /** @brief Reports whether a translated close request has been received. */
         bool shouldClose() const noexcept;
 

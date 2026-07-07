@@ -620,7 +620,7 @@ namespace Raythm::Core
             }
 
             Game::GameplaySessionConfig sessionConfig{};
-            sessionConfig.scrollLeadTime = std::chrono::milliseconds{1000};
+            sessionConfig.scrollLeadTime = std::chrono::milliseconds{500};
             impl.gameplayRuntime = std::make_unique<GameplayRuntimeDriver>(chart, sessionConfig);
             const auto [initialViewportWidth, initialViewportHeight] = getGameplayViewportSize(
                 *impl.window,
@@ -632,7 +632,55 @@ namespace Raythm::Core
                 initialViewportWidth,
                 initialViewportHeight));
 
+            /**
+             * @brief Applies a translated window event to Core-owned platform and render state.
+             * @note Focus transitions rebaseline input so stale held/edge state cannot survive startup focus races.
+             */
+            const auto handleRuntimeWindowEvent = [&impl](const Platform::WindowEvent& event) noexcept
+            {
+                impl.window->applyEvent(event);
+                impl.renderer->handleWindowEvent(event);
+                if (event.type == Platform::WindowEventType::FocusLost ||
+                    event.type == Platform::WindowEventType::FocusGained)
+                {
+                    impl.inputState.clear();
+                }
+            };
+
+            /**
+             * @brief Drains startup window events after showing the window and before audio playback begins.
+             * @note Focus requests are best-effort and bounded because operating systems may deny foreground activation.
+             */
+            const auto prepareStartupWindowInteraction = [&impl, &handleRuntimeWindowEvent]() noexcept
+            {
+                if (!impl.window->hasInputFocus())
+                {
+                    (void)impl.window->requestInputFocus();
+                }
+
+                SDL_PumpEvents();
+                Platform::PlatformEvent event{};
+                while (impl.eventPump.pollEvent(event, impl.window->getWindowId()))
+                {
+                    if (event.type == Platform::PlatformEventType::Window)
+                    {
+                        handleRuntimeWindowEvent(event.window);
+                        if (impl.window->shouldClose())
+                        {
+                            break;
+                        }
+                    }
+                }
+            };
+
             impl.window->show();
+            prepareStartupWindowInteraction();
+            if (impl.window->shouldClose())
+            {
+                m_state = ApplicationState::Stopped;
+                return APPLICATION_SUCCESS_EXIT_CODE;
+            }
+
             if (!impl.audioEngine->play())
             {
                 throw std::runtime_error("Gameplay startup failed: unable to start music playback");
@@ -648,6 +696,10 @@ namespace Raythm::Core
                 m_timeSystem.beginFrame();
                 impl.inputState.beginFrame();
 
+                // EventPump reads with SDL_PeepEvents(), which does not implicitly gather OS window messages.
+                // Pump here each frame so Windows keeps receiving input, close, and responsiveness messages.
+                SDL_PumpEvents();
+
                 Platform::PlatformEvent event{};
                 std::vector<Platform::InputEvent> frameInputEvents;
                 std::vector<Game::LanePressEvent> pressEvents;
@@ -658,12 +710,7 @@ namespace Raythm::Core
                 {
                     if (event.type == Platform::PlatformEventType::Window)
                     {
-                        impl.window->applyEvent(event.window);
-                        impl.renderer->handleWindowEvent(event.window);
-                        if (event.window.type == Platform::WindowEventType::FocusLost)
-                        {
-                            impl.inputState.clear();
-                        }
+                        handleRuntimeWindowEvent(event.window);
                     }
                     else if (event.type == Platform::PlatformEventType::Input)
                     {
@@ -712,15 +759,6 @@ namespace Raythm::Core
                     continue;
                 }
 
-                if (impl.audioPausedForRender)
-                {
-                    if (!impl.audioEngine->play())
-                    {
-                        throw std::runtime_error("Gameplay runtime failed: unable to resume music after rendering resumed");
-                    }
-                    impl.audioPausedForRender = false;
-                }
-
                 const auto [viewportWidth, viewportHeight] = getGameplayViewportSize(
                     *impl.window,
                     m_options.windowWidth,
@@ -733,7 +771,18 @@ namespace Raythm::Core
                     pressEvents));
 
                 const Render::RendererFrameStatus renderStatus = impl.renderer->renderFrame();
-                if (shouldContinueAfterRenderStatus(renderStatus))
+                if (renderStatus == Render::RendererFrameStatus::Submitted)
+                {
+                    if (impl.audioPausedForRender)
+                    {
+                        if (!impl.audioEngine->play())
+                        {
+                            throw std::runtime_error("Gameplay runtime failed: unable to resume music after rendering resumed");
+                        }
+                        impl.audioPausedForRender = false;
+                    }
+                }
+                else if (shouldContinueAfterRenderStatus(renderStatus))
                 {
                     SDL_Delay(PAUSED_RENDER_DELAY_MILLISECONDS);
                 }

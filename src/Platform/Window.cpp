@@ -190,6 +190,18 @@ namespace Raythm::Platform
         }
     }
 
+    bool Window::requestInputFocus() noexcept
+    {
+        if (m_window == nullptr)
+        {
+            return false;
+        }
+
+        const bool raised = SDL_RaiseWindow(m_window);
+        const bool synced = SDL_SyncWindow(m_window);
+        return raised && synced;
+    }
+
     bool Window::shouldClose() const noexcept
     {
         return m_shouldClose;

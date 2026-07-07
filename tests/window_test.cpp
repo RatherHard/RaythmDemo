@@ -243,6 +243,8 @@ namespace
 
         window.setBorderlessFullscreen(false);
         passed &= expect(!window.isBorderlessFullscreen(), "fullscreen disabled should keep the window windowed");
+        (void)window.requestInputFocus();
+        passed &= expect(!window.shouldClose(), "best-effort focus request should not close the window");
 
         Platform::Window movedWindow(std::move(window));
         passed &= expect(movedWindow.getNativeHandle() != nullptr, "move construction should transfer native handle");
@@ -640,6 +642,33 @@ namespace
     }
 
     /**
+     * @brief Verifies that focus transitions are delivered through the unified platform event stream in order.
+     * @return True when focus lost and focus gained events are translated without reordering.
+     */
+    bool testEventPumpUnifiedPlatformFocusEventsTranslateInOrder()
+    {
+        Platform::Window window(makeHiddenOptions());
+        Platform::EventPump eventPump{};
+        SDL_FlushEvents(SDL_EVENT_FIRST, SDL_EVENT_LAST);
+        const SDL_WindowID windowId = window.getWindowId();
+
+        bool passed = true;
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_FOCUS_LOST, windowId), "should push focus lost event");
+        passed &= expect(pushWindowEvent(SDL_EVENT_WINDOW_FOCUS_GAINED, windowId), "should push focus gained event");
+
+        Platform::PlatformEvent event{};
+        passed &= expect(eventPump.pollEvent(event, windowId), "unified stream should translate focus lost event");
+        passed &= expect(event.type == Platform::PlatformEventType::Window, "focus lost should be a window event");
+        passed &= expect(event.window.type == Platform::WindowEventType::FocusLost, "focus lost type should match");
+
+        passed &= expect(eventPump.pollEvent(event, windowId), "unified stream should translate focus gained event");
+        passed &= expect(event.type == Platform::PlatformEventType::Window, "focus gained should be a window event");
+        passed &= expect(event.window.type == Platform::WindowEventType::FocusGained, "focus gained type should match");
+
+        return passed;
+    }
+
+    /**
      * @brief Verifies the unified platform event stream preserves window and input event order.
      * @return True when window and input payloads are delivered through one polling entrypoint.
      */
@@ -739,6 +768,7 @@ int main(int argc, char* argv[])
         allTestsPassed &= testInputPollingPreservesWindowEvents();
         allTestsPassed &= testWindowPollingPreservesInputEvents();
         allTestsPassed &= testEventPumpPreservesForeignWindowEvents();
+        allTestsPassed &= testEventPumpUnifiedPlatformFocusEventsTranslateInOrder();
         allTestsPassed &= testEventPumpUnifiedPlatformEventTranslation();
         allTestsPassed &= testVulkanExtensionQuery();
     }
